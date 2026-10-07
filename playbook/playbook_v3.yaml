@@ -1,0 +1,66 @@
+version: "3.0"
+
+market_opportunity:
+  max_score: 100
+
+  factors:
+    structural_demand_growth:
+      weight: 20
+
+    supply_constraint:
+      weight: 20
+
+    capital_flow_confirmation:
+      weight: 15
+
+    order_visibility:
+      weight: 15
+
+    under_recognition:
+      weight: 15
+
+    beneficiary_concentration:
+      weight: 15
+
+  thresholds:
+    active: 75
+    watchlist: 55
+
+discovery:
+  max_score: 100
+
+  factors:
+    demand_acceleration:
+      weight: 15
+
+    scarcity_supply_constraint:
+      weight: 15
+
+    backlog_orders:
+      weight: 15
+
+    capacity_expansion:
+      weight: 10
+
+    revenue_acceleration:
+      weight: 10
+
+    margin_inflection:
+      weight: 10
+
+    estimate_revisions:
+      weight: 10
+
+    competitive_advantage:
+      weight: 5
+
+    balance_sheet_runway:
+      weight: 5
+
+    valuation:
+      weight: 5
+
+  thresholds:
+    tier_a: 80
+    tier_b: 65
+    watchlist: 50

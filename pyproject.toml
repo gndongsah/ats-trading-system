@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ats-trading-system"
+version = "0.1.0"
+description = "Agentic Trading System implementing the Trading Strategy Playbook as code"
+requires-python = ">=3.12"
+
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "fastapi>=0.115",
+    "uvicorn>=0.30"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
