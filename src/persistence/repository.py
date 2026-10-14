@@ -26,8 +26,8 @@ class PersistenceConflict(ValueError):
     """An append-only record ID was reused with different data."""
 
 
-JOURNAL_SCHEMA_VERSION = 2
-SCORE_SNAPSHOT_SCHEMA_VERSION = 2
+JOURNAL_SCHEMA_VERSION = 4
+SCORE_SNAPSHOT_SCHEMA_VERSION = 4
 
 
 def _migrate_score_snapshot_v1_to_v2(payload: dict[str, Any]) -> dict[str, Any]:
@@ -50,6 +50,53 @@ def _migrate_score_snapshot_v1_to_v2(payload: dict[str, Any]) -> dict[str, Any]:
     return migrated
 
 
+def _migrate_score_snapshot_v2_to_v3(payload: dict[str, Any]) -> dict[str, Any]:
+    migrated = dict(payload)
+    if "contributions" in payload:
+        migrated["contributions"] = [
+            {
+                **contribution,
+                "evidence": [
+                    {
+                        **evidence,
+                        "version": evidence.get("version", 1),
+                        "source_document_version_id": evidence.get(
+                            "source_document_version_id"
+                        ),
+                    }
+                    for evidence in contribution.get("evidence", [])
+                ],
+            }
+            for contribution in payload["contributions"]
+        ]
+    return migrated
+
+
+def _migrate_score_snapshot_v3_to_v4(payload: dict[str, Any]) -> dict[str, Any]:
+    migrated = dict(payload)
+    if "contributions" in payload:
+        migrated["contributions"] = [
+            {
+                **contribution,
+                "evidence": [
+                    {
+                        **evidence,
+                        "verifier_identity": evidence.get("verifier_identity"),
+                        "verified_at": evidence.get("verified_at"),
+                        "verification_method": evidence.get("verification_method"),
+                        "verification_policy_version": evidence.get(
+                            "verification_policy_version"
+                        ),
+                        "verification_notes": evidence.get("verification_notes"),
+                    }
+                    for evidence in contribution.get("evidence", [])
+                ],
+            }
+            for contribution in payload["contributions"]
+        ]
+    return migrated
+
+
 def _migrate_journal_v1_to_v2(payload: dict[str, Any]) -> dict[str, Any]:
     migrated = dict(payload)
     plan = migrated["plan"]
@@ -69,6 +116,42 @@ def _migrate_journal_v1_to_v2(payload: dict[str, Any]) -> dict[str, Any]:
     return migrated
 
 
+def _migrate_journal_v2_to_v3(payload: dict[str, Any]) -> dict[str, Any]:
+    migrated = dict(payload)
+    migrated["prior_plans"] = [
+        {
+            **plan,
+            "score_snapshot": _migrate_score_snapshot_v2_to_v3(plan["score_snapshot"]),
+        }
+        for plan in migrated.get("prior_plans", [])
+    ]
+    migrated["plan"] = {
+        **migrated["plan"],
+        "score_snapshot": _migrate_score_snapshot_v2_to_v3(
+            migrated["plan"]["score_snapshot"]
+        ),
+    }
+    return migrated
+
+
+def _migrate_journal_v3_to_v4(payload: dict[str, Any]) -> dict[str, Any]:
+    migrated = dict(payload)
+    migrated["prior_plans"] = [
+        {
+            **plan,
+            "score_snapshot": _migrate_score_snapshot_v3_to_v4(plan["score_snapshot"]),
+        }
+        for plan in migrated.get("prior_plans", [])
+    ]
+    migrated["plan"] = {
+        **migrated["plan"],
+        "score_snapshot": _migrate_score_snapshot_v3_to_v4(
+            migrated["plan"]["score_snapshot"]
+        ),
+    }
+    return migrated
+
+
 def _encode_document(payload: dict[str, Any], schema_version: int) -> dict[str, Any]:
     return {"schema_version": schema_version, "data": payload}
 
@@ -77,7 +160,11 @@ def decode_score_snapshot(document: dict[str, Any]) -> ScoreSnapshot:
     payload = _decode_document(
         document,
         document_name="score snapshot",
-        migrations={1: _migrate_score_snapshot_v1_to_v2},
+        migrations={
+            1: _migrate_score_snapshot_v1_to_v2,
+            2: _migrate_score_snapshot_v2_to_v3,
+            3: _migrate_score_snapshot_v3_to_v4,
+        },
         current_version=SCORE_SNAPSHOT_SCHEMA_VERSION,
     )
     return ScoreSnapshot.model_validate(payload)
@@ -123,6 +210,8 @@ class JournalRepositoryProtocol(Protocol):
     ) -> int: ...
 
     def get(self, journal_id: UUID) -> JournalEntry | None: ...
+
+    def get_revision(self, journal_id: UUID, revision: int) -> JournalEntry | None: ...
 
     def get_by_trade_id(self, trade_id: UUID) -> JournalEntry | None: ...
 
@@ -255,6 +344,15 @@ class JournalRepository:
         )
         return self._decode(record)
 
+    def get_revision(self, journal_id: UUID, revision: int) -> JournalEntry | None:
+        record = self._session.scalar(
+            select(JournalEntryRecord).where(
+                JournalEntryRecord.id == journal_id,
+                JournalEntryRecord.revision == revision,
+            )
+        )
+        return self._decode(record)
+
     def get_by_trade_id(self, trade_id: UUID) -> JournalEntry | None:
         record = self._session.scalar(
             select(JournalEntryRecord)
@@ -271,7 +369,11 @@ class JournalRepository:
         payload = _decode_document(
             record.entry_data,
             document_name="journal entry",
-            migrations={1: _migrate_journal_v1_to_v2},
+            migrations={
+                1: _migrate_journal_v1_to_v2,
+                2: _migrate_journal_v2_to_v3,
+                3: _migrate_journal_v3_to_v4,
+            },
             current_version=JOURNAL_SCHEMA_VERSION,
         )
         return JournalEntry.model_validate(payload)

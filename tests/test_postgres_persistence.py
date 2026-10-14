@@ -1,7 +1,8 @@
 import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from threading import Barrier
 from uuid import uuid4
@@ -14,13 +15,21 @@ from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import sessionmaker
 
+from src.domain.evidence import EvidenceItem, SourceDocument
 from src.domain.models import EvidenceStatus, OrderAction, OrderIntent, OrderType
+from src.evidence_verification import (
+    evaluate_scoring_eligibility,
+    score_contribution_from_eligibility,
+)
+from src.persistence.evidence_repository import EvidenceRepository
 from src.persistence.models import (
+    EvidenceItemRecord,
     FillRecord,
     JournalEntryRecord,
     OrderIntentRecord,
     PositionSnapshotRecord,
     ScoreSnapshotRecord,
+    SourceDocumentRecord,
     TradePlanRecord,
     TradeRecord,
     TradeResultRecord,
@@ -455,3 +464,283 @@ def test_postgres_reads_legacy_jsonb_snapshots_without_rewriting_them(
         ).snapshot_data
     assert original_revision == legacy_entry
     assert original_snapshot == legacy_snapshot
+
+
+def test_postgres_evidence_is_append_only_and_runtime_privileges_are_restricted(
+    migrated_postgres_database: tuple[Engine, str],
+):
+    engine, runtime_role = migrated_postgres_database
+    decision_at = datetime(2026, 1, 2, 15, 0, tzinfo=UTC)
+    source = SourceDocument(
+        source_id="ats005-runtime-probe",
+        version=1,
+        source_type="filing",
+        source_url="https://example.test/source",
+        publisher="ABC Inc.",
+        subject="ABC",
+        published_at=decision_at - timedelta(hours=1),
+        observed_at=decision_at - timedelta(minutes=30),
+        content_hash="a" * 64,
+    )
+    evidence = EvidenceItem(
+        source_document_version_id=source.id,
+        subject="ABC",
+        factor="demand_acceleration",
+        excerpt="Demand increased.",
+        confidence=Decimal("0.9"),
+        verification_status=EvidenceStatus.VERIFIED,
+        verifier_identity="reviewer:postgres-test",
+        verified_at=decision_at - timedelta(minutes=10),
+        verification_method="source_reconciliation",
+        verification_policy_version="ats-evidence-1",
+        observed_at=decision_at - timedelta(minutes=20),
+    )
+    factory = sessionmaker(bind=engine)
+    with factory.begin() as session:
+        repository = EvidenceRepository(session)
+        repository.save_source(source)
+        repository.save_evidence(evidence)
+
+    with engine.connect() as connection:
+        schema = connection.scalar(text("SELECT current_schema()"))
+        for table in ("ats_source_documents", "ats_evidence_items"):
+            for privilege, allowed in (
+                ("SELECT", True),
+                ("INSERT", True),
+                ("UPDATE", False),
+                ("DELETE", False),
+                ("TRUNCATE", False),
+            ):
+                assert (
+                    connection.scalar(
+                        text("SELECT has_table_privilege(:role, :table, :privilege)"),
+                        {
+                            "role": runtime_role,
+                            "table": f"{schema}.{table}",
+                            "privilege": privilege,
+                        },
+                    )
+                    is allowed
+                )
+
+    trigger_statements = (
+        "UPDATE ats_evidence_items SET evidence_data = '{}'::jsonb",
+        (
+            "UPDATE ats_evidence_items "
+            "SET evidence_data = jsonb_set(evidence_data, "
+            "'{verification_status}', '\"rejected\"'::jsonb)"
+        ),
+        "DELETE FROM ats_evidence_items",
+        "TRUNCATE TABLE ats_evidence_items",
+        "UPDATE ats_source_documents SET source_data = '{}'::jsonb",
+        "DELETE FROM ats_source_documents",
+        "TRUNCATE TABLE ats_source_documents CASCADE",
+    )
+    for statement in trigger_statements:
+        with (
+            pytest.raises(DBAPIError, match="append-only"),
+            engine.begin() as connection,
+        ):
+            connection.exec_driver_sql(statement)
+
+    runtime_source = SourceDocument(
+        source_id="ats005-runtime-insert",
+        version=1,
+        source_type="filing",
+        publisher="ABC Inc.",
+        subject="ABC",
+        published_at=decision_at - timedelta(hours=1),
+        observed_at=decision_at - timedelta(minutes=30),
+        content_ref="filing://abc/runtime-insert",
+    )
+    runtime_evidence = EvidenceItem(
+        source_document_version_id=runtime_source.id,
+        subject="ABC",
+        factor="demand_acceleration",
+        excerpt="Demand increased.",
+        confidence=Decimal("0.8"),
+        observed_at=decision_at - timedelta(minutes=20),
+    )
+    quoted_role = engine.dialect.identifier_preparer.quote(runtime_role)
+    with engine.begin() as connection:
+        connection.exec_driver_sql(f"SET ROLE {quoted_role}")
+        connection.execute(
+            insert(SourceDocumentRecord).values(
+                id=runtime_source.id,
+                source_id=runtime_source.source_id,
+                version=runtime_source.version,
+                source_data=runtime_source.model_dump(mode="json"),
+            )
+        )
+        connection.execute(
+            insert(EvidenceItemRecord).values(
+                id=runtime_evidence.id,
+                version=runtime_evidence.version,
+                source_document_version_id=runtime_source.id,
+                evidence_data=runtime_evidence.model_dump(mode="json"),
+            )
+        )
+        assert connection.scalar(text("SELECT count(*) FROM ats_source_documents")) == 2
+        assert connection.scalar(text("SELECT count(*) FROM ats_evidence_items")) == 2
+
+    forbidden_statements = (
+        "UPDATE ats_evidence_items SET evidence_data = '{}'::jsonb",
+        "DELETE FROM ats_evidence_items",
+        "TRUNCATE TABLE ats_evidence_items",
+        "ALTER TABLE ats_evidence_items ADD COLUMN runtime_probe integer",
+        "ALTER TABLE ats_evidence_items DISABLE TRIGGER ALL",
+        "CREATE TABLE ats_evidence_runtime_probe (id integer)",
+        f'ALTER SCHEMA "{schema}" RENAME TO ats_evidence_runtime_probe',
+    )
+    for statement in forbidden_statements:
+        with pytest.raises(DBAPIError), engine.connect() as connection:
+            connection.exec_driver_sql(f"SET ROLE {quoted_role}")
+            connection.exec_driver_sql(statement)
+
+    with factory() as session:
+        assert (
+            session.scalar(select(func.count()).select_from(SourceDocumentRecord)) == 2
+        )
+        assert session.scalar(select(func.count()).select_from(EvidenceItemRecord)) == 2
+        historical = EvidenceRepository(session).get_evidence(evidence.id, 1)
+        assert historical == evidence
+
+
+def test_postgres_traceability_from_evidence_through_score_to_journal(
+    migrated_postgres_engine: Engine,
+):
+    decision_at = datetime(2026, 1, 2, 15, 0, tzinfo=UTC)
+    source = SourceDocument(
+        source_id="ats005-score-trace",
+        version=1,
+        source_type="filing",
+        source_url="https://example.test/abc-filing",
+        publisher="ABC Inc.",
+        subject="ABC",
+        published_at=decision_at - timedelta(hours=1),
+        observed_at=decision_at - timedelta(minutes=30),
+        content_ref="filing://abc/annual-report/2026",
+        version_metadata={"accession": "0000001"},
+    )
+    evidence = EvidenceItem(
+        source_document_version_id=source.id,
+        subject="ABC",
+        factor="demand_acceleration",
+        inflection_stage=5,
+        excerpt="Demand increased during the reporting period.",
+        confidence=Decimal("0.96"),
+        verification_status=EvidenceStatus.VERIFIED,
+        verifier_identity="reviewer:trace-test",
+        verified_at=decision_at - timedelta(minutes=10),
+        verification_method="source_reconciliation",
+        verification_policy_version="ats-evidence-1",
+        verification_notes="Filing excerpt reconciled against reported figures.",
+        observed_at=decision_at - timedelta(minutes=20),
+    )
+    eligibility = evaluate_scoring_eligibility(
+        subject="ABC",
+        factor="demand_acceleration",
+        requested_contribution=Decimal(100),
+        decision_at=decision_at,
+        evidence_items=(evidence,),
+        sources={source.id: source},
+        inflection_stage=5,
+    )
+    assert eligibility.eligible
+    contribution = score_contribution_from_eligibility(
+        factor="demand_acceleration",
+        result=eligibility,
+        evidence_items=(evidence,),
+        sources={source.id: source},
+    )
+    trade_template = make_complete_trade()
+    original_entry = trade_template.model_copy(
+        update={
+            "orders": (),
+            "fills": (),
+            "position_snapshots": (),
+            "result": None,
+            "created_at": trade_template.plan.planned_at,
+        }
+    )
+    original_snapshot = original_entry.plan.score_snapshot
+    snapshot = original_snapshot.model_copy(
+        update={
+            "id": uuid4(),
+            "decided_at": original_snapshot.decided_at + timedelta(minutes=1),
+            "discovery": 15,
+            "contributions": (contribution,),
+        }
+    )
+    prior_plans = (*original_entry.prior_plans, original_entry.plan)
+    plan = original_entry.plan.model_copy(
+        update={
+            "id": uuid4(),
+            "version": original_entry.plan.version + 1,
+            "supersedes_plan_id": original_entry.plan.id,
+            "planned_at": original_entry.plan.planned_at + timedelta(minutes=1),
+            "score_snapshot": snapshot,
+        }
+    )
+    order = trade_template.orders[0].model_copy(
+        update={
+            "id": uuid4(),
+            "plan_id": plan.id,
+            "created_at": plan.planned_at + timedelta(minutes=1),
+        }
+    )
+    rescored_entry = original_entry.model_copy(
+        update={
+            "plan": plan,
+            "prior_plans": prior_plans,
+            "orders": (order,),
+            "created_at": order.created_at,
+        }
+    )
+    factory = sessionmaker(bind=migrated_postgres_engine)
+    with factory.begin() as session:
+        evidence_repository = EvidenceRepository(session)
+        evidence_repository.save_source(source)
+        evidence_repository.save_evidence(evidence)
+        journal_repository = JournalRepository(session)
+        assert journal_repository.save(original_entry) == 1
+        assert journal_repository.save(rescored_entry, expected_revision=1) == 2
+
+    with factory() as session:
+        journal_repository = JournalRepository(session)
+        restored = journal_repository.get(rescored_entry.id)
+        historical = journal_repository.get_revision(rescored_entry.id, 1)
+        evidence_repository = EvidenceRepository(session)
+        persisted_evidence = evidence_repository.get_evidence(evidence.id, 1)
+        persisted_source = evidence_repository.get_source(source.id)
+        stored_snapshot = session.get(ScoreSnapshotRecord, snapshot.id).snapshot_data
+        historical_snapshot = session.get(
+            ScoreSnapshotRecord, original_snapshot.id
+        ).snapshot_data
+        snapshot_count = session.scalar(
+            select(func.count()).select_from(ScoreSnapshotRecord)
+        )
+
+    assert restored == rescored_entry
+    assert historical == original_entry
+    assert historical.plan.score_snapshot.id == original_snapshot.id
+    assert restored.plan.score_snapshot.id == snapshot.id
+    assert snapshot_count == 2
+    assert decode_score_snapshot(historical_snapshot) == original_snapshot
+    stored_ref = restored.plan.score_snapshot.contributions[0].evidence[0]
+    assert stored_ref.id == evidence.id
+    assert stored_ref.version == evidence.version
+    assert stored_ref.source_document_version_id == source.id
+    assert stored_ref.published_at == source.published_at
+    assert stored_ref.observed_at == evidence.observed_at
+    assert persisted_evidence == evidence
+    assert persisted_source == source
+    assert stored_snapshot["schema_version"] == 4
+    assert stored_snapshot["data"]["contributions"][0]["evidence"][0]["version"] == 1
+    stored_evidence_ref = stored_snapshot["data"]["contributions"][0]["evidence"][0]
+    assert stored_evidence_ref[
+        "verified_at"
+    ] == evidence.verified_at.isoformat().replace("+00:00", "Z")
+    assert stored_evidence_ref["verifier_identity"] == "reviewer:trace-test"
+    assert stored_evidence_ref["verification_policy_version"] == "ats-evidence-1"
+    assert original_entry.plan.score_snapshot is original_snapshot

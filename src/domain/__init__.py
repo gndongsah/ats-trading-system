@@ -1,3 +1,4 @@
+from src.domain.evidence import EvidenceItem, SourceDocument
 from src.domain.models import (
     EvidenceRef,
     EvidenceStatus,
@@ -24,6 +25,7 @@ from src.domain.models import (
 )
 
 __all__ = [
+    "EvidenceItem",
     "EvidenceRef",
     "EvidenceStatus",
     "FactorExposure",
@@ -40,6 +42,7 @@ __all__ = [
     "ScoreSnapshot",
     "SecurityRef",
     "SetupType",
+    "SourceDocument",
     "ThemeExposure",
     "TradePlan",
     "TradeResult",

@@ -179,6 +179,8 @@ class FactorExposure(ImmutableModel):
 
 class EvidenceRef(ImmutableModel):
     id: UUID = Field(default_factory=uuid4)
+    version: int = Field(default=1, ge=1)
+    source_document_version_id: UUID | None = None
     source: str = Field(min_length=1)
     source_url: str | None = None
     published_at: datetime | None = None
@@ -187,8 +189,13 @@ class EvidenceRef(ImmutableModel):
     excerpt: str | None = None
     confidence: Decimal = Field(ge=Decimal(0), le=Decimal(1))
     verification_status: EvidenceStatus = EvidenceStatus.UNVERIFIED
+    verifier_identity: str | None = None
+    verified_at: datetime | None = None
+    verification_method: str | None = None
+    verification_policy_version: str | None = None
+    verification_notes: str | None = None
 
-    @field_validator("published_at", "observed_at")
+    @field_validator("published_at", "observed_at", "verified_at")
     @classmethod
     def timestamps_are_utc(cls, value: datetime | None) -> datetime | None:
         return _require_utc(value) if value is not None else None
@@ -234,6 +241,11 @@ class ScoreSnapshot(ImmutableModel):
                     and evidence.published_at > self.decided_at
                 ):
                     raise ValueError("evidence cannot be published after the decision")
+                if (
+                    evidence.verified_at is not None
+                    and evidence.verified_at > self.decided_at
+                ):
+                    raise ValueError("evidence cannot be verified after the decision")
         return self
 
 

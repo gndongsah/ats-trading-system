@@ -8,6 +8,21 @@ def calculate_weighted_score(
     factor_scores: Mapping[str, float],
     section: ScoreSection,
 ) -> float:
+    validate_factor_scores(factor_scores, section)
+    total_weight = sum(factor.weight for factor in section.factors.values())
+    return (
+        sum(
+            factor_scores[name] * factor.weight
+            for name, factor in section.factors.items()
+        )
+        / total_weight
+    )
+
+
+def validate_factor_scores(
+    factor_scores: Mapping[str, float],
+    section: ScoreSection,
+) -> None:
     expected_factors = set(section.factors)
     supplied_factors = set(factor_scores)
     if supplied_factors != expected_factors:
@@ -21,19 +36,12 @@ def calculate_weighted_score(
         raise ValueError("; ".join(details))
 
     for name, score in factor_scores.items():
+        if isinstance(score, bool):
+            raise TypeError(f"Factor '{name}' must be numeric, not boolean")
         if not math.isfinite(score) or not 0 <= score <= section.max_score:
             raise ValueError(
                 f"Factor '{name}' must be between 0 and {section.max_score}"
             )
-
-    total_weight = sum(factor.weight for factor in section.factors.values())
-    return (
-        sum(
-            factor_scores[name] * factor.weight
-            for name, factor in section.factors.items()
-        )
-        / total_weight
-    )
 
 
 def score_market_opportunity(

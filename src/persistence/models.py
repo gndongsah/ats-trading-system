@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     String,
     UniqueConstraint,
@@ -143,3 +144,35 @@ class JournalEntryRecord(Base):
     lesson: Mapped[str | None] = mapped_column(String, nullable=True)
     thesis: Mapped[str | None] = mapped_column(String, nullable=True)
     entry_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
+
+
+class SourceDocumentRecord(Base):
+    __tablename__ = "ats_source_documents"
+    __table_args__ = (
+        UniqueConstraint("source_id", "version", name="uq_ats_source_document_version"),
+        CheckConstraint("version >= 1", name="ck_ats_source_document_version_positive"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
+
+
+class EvidenceItemRecord(Base):
+    __tablename__ = "ats_evidence_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["source_document_version_id"],
+            ["ats_source_documents.id"],
+            name="fk_ats_evidence_source_version",
+        ),
+        CheckConstraint("version >= 1", name="ck_ats_evidence_version_positive"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_document_version_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), nullable=False
+    )
+    evidence_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
