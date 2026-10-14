@@ -1,5 +1,7 @@
+from copy import deepcopy
+
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from src.database import Base, create_database_engine
@@ -13,7 +15,11 @@ from src.persistence.models import (
     TradeRecord,
     TradeResultRecord,
 )
-from src.persistence.repository import JournalRepository, PersistenceConflict
+from src.persistence.repository import (
+    JournalRepository,
+    PersistenceConflict,
+    decode_score_snapshot,
+)
 from tests.persistence_fixtures import make_complete_trade
 
 
@@ -61,9 +67,9 @@ def test_complete_trade_round_trips_in_a_new_database_session():
             snapshot_document = session.get(
                 ScoreSnapshotRecord, entry.plan.score_snapshot.id
             ).snapshot_data
-            assert journal_document["schema_version"] == 2
+            assert journal_document["schema_version"] == 4
             assert journal_document["data"] == entry.model_dump(mode="json")
-            assert snapshot_document["schema_version"] == 2
+            assert snapshot_document["schema_version"] == 4
             assert snapshot_document["data"] == entry.plan.score_snapshot.model_dump(
                 mode="json"
             )
@@ -107,6 +113,75 @@ def test_journal_feedback_changes_are_stored_as_new_revisions():
                 )
             ).all()
             assert revisions == [1, 2]
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+def test_schema_v3_journal_and_snapshot_documents_deserialize_without_rewrite():
+    engine = create_database_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    entry = make_complete_trade()
+    snapshot = entry.plan.score_snapshot
+    try:
+        with Session(engine) as session, session.begin():
+            JournalRepository(session).save(entry)
+
+        journal_data = entry.model_dump(mode="json")
+        snapshot_data = snapshot.model_dump(mode="json")
+        for payload in (
+            snapshot_data,
+            *(
+                plan["score_snapshot"]
+                for plan in (
+                    *journal_data["prior_plans"],
+                    journal_data["plan"],
+                )
+            ),
+        ):
+            for contribution in payload["contributions"]:
+                for evidence in contribution["evidence"]:
+                    for key in (
+                        "verifier_identity",
+                        "verified_at",
+                        "verification_method",
+                        "verification_policy_version",
+                        "verification_notes",
+                    ):
+                        evidence.pop(key, None)
+        old_journal_document = {
+            "schema_version": 3,
+            "data": deepcopy(journal_data),
+        }
+        old_snapshot_document = {
+            "schema_version": 3,
+            "data": deepcopy(snapshot_data),
+        }
+        with Session(engine) as session, session.begin():
+            session.execute(
+                update(JournalEntryRecord)
+                .where(JournalEntryRecord.id == entry.id)
+                .values(entry_data=old_journal_document)
+            )
+            session.execute(
+                update(ScoreSnapshotRecord)
+                .where(ScoreSnapshotRecord.id == snapshot.id)
+                .values(snapshot_data=old_snapshot_document)
+            )
+
+        with Session(engine) as session:
+            restored = JournalRepository(session).get(entry.id)
+            stored_journal_document = session.get(
+                JournalEntryRecord, (entry.id, 1)
+            ).entry_data
+            stored_snapshot_document = session.get(
+                ScoreSnapshotRecord, snapshot.id
+            ).snapshot_data
+
+        assert restored == entry
+        assert decode_score_snapshot(old_snapshot_document) == snapshot
+        assert stored_journal_document == old_journal_document
+        assert stored_snapshot_document == old_snapshot_document
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()

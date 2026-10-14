@@ -92,8 +92,10 @@ python -m pytest tests/test_domain_models.py -v
 ```
 
 These models establish immutable domain-level contracts. Append-only journal
-records and their PostgreSQL schema are implemented in ATS-004; evidence
-verification policy and portfolio-level risk limits remain future work.
+records and their PostgreSQL schema are implemented in ATS-004. ATS-005
+provides the append-only source/evidence store and deterministic scoring
+eligibility service described below. Portfolio-level risk limits remain future
+work.
 
 ## ATS-004 PostgreSQL journal persistence
 
@@ -104,9 +106,9 @@ JSONB payloads preserve the complete Pydantic contracts (including evidence,
 decimal values, risk intent, and plan history), while relational keys and
 constraints provide stable trade/plan identities and lifecycle references.
 Journal and score-snapshot JSONB documents carry explicit schema versions;
-read-time migrations support historical unversioned/version-1 snapshots
-without rewriting their decision-time records. PostgreSQL triggers reject
-updates and deletes from every journal table. Journal edits are stored as new
+read-time migrations support historical unversioned and version-1 through
+version-3 snapshots without rewriting their decision-time records. PostgreSQL
+triggers reject updates and deletes from every journal table. Journal edits are stored as new
 revisions; PostgreSQL serializes writes per trade with a transaction-scoped
 advisory lock, so the runtime role needs no row-update privilege. Callers own
 the transaction and should write with
@@ -148,6 +150,41 @@ $env:ATS_TEST_DATABASE_URL = "postgresql+psycopg://user:password@localhost:5432/
 python -m pytest tests/test_postgres_persistence.py -v
 ```
 
+## ATS-005 source evidence and scoring eligibility
+
+`SourceDocument` and `EvidenceItem` in `src/domain/evidence.py` are persisted as
+immutable, versioned records by `EvidenceRepository`. A source version retains
+its source identifier, publisher, subject, publication and observation times,
+original-content reference or SHA-256 hash, and version metadata. Evidence
+versions retain their exact source-document version, subject, Playbook factor,
+optional inflection stage, excerpt or structured metric, confidence, status,
+notes, and timestamps. Verified records also carry verifier identity, UTC
+verification time, method, policy version, and notes; these values are fixed
+within an evidence version, and a later review is recorded as a new version.
+PostgreSQL migration `20261014_03` adds append-only triggers and grants the
+configured runtime role `SELECT` and `INSERT` only.
+
+Use `evaluate_scoring_eligibility` or `score_discovery_with_evidence` from
+`src/evidence_verification.py` for qualitative Discovery factors. Eligibility
+requires a resolvable, traceable source; publication and observation no later
+than the score decision; matching subject and factor; sufficient excerpt or
+structured metric; `VERIFIED` status; complete verification provenance; and a
+verification timestamp no later than the score decision. A URL by itself is
+not traceable.
+Unverified or semantically conflicting evidence remains pending; confidence
+does not override failed checks. Ineligible positive factor scores receive
+zero allowed points, and the weighted score still uses the existing Playbook
+weights and limits. The lower-level `score_discovery` function remains a
+numeric weighting primitive; callers scoring qualitative factors must apply
+the evidence-aware gate first.
+
+Evidence references embedded in score snapshots retain both evidence ID and
+version plus the source-document version ID and verification provenance.
+Snapshot JSONB is schema-versioned (current version 4);
+rescoring creates a new score snapshot, leaving decision-time snapshots and
+source/evidence versions unchanged. Journal entries continue to persist the
+score snapshot reference through ATS-004.
+
 ## Continuous integration
 
 GitHub Actions runs Ruff and the complete pytest suite on every push and pull
@@ -162,13 +199,20 @@ request.
   and returns its weighted score and `ACTIVE`, `WATCHLIST`, or `BACKGROUND`
   decision.
 - `POST /layer1/discovery` accepts every discovery factor score in the same
-  shape and returns its weighted score and `TIER_A`, `TIER_B`, `WATCHLIST`, or
-  `REJECT` decision.
+  shape, plus optional `subject`, `decision_at`, and `evidence_by_factor`
+  entries containing persisted evidence IDs and versions. The endpoint loads
+  evidence from the store and awards positive factor points only when the
+  deterministic eligibility checks pass. It returns the weighted score,
+  eligibility reasons and exact evidence versions, and a `TIER_A`, `TIER_B`,
+  `WATCHLIST`, or `REJECT` decision. Without evidence, positive factor scores
+  contribute zero.
 
-For example, submit a JSON body of the form
-`{"factor_scores":{"factor_name":100}}`, replacing `factor_name` with all
-factor names required by that layer. Missing, unexpected, and out-of-range
-factor scores return a clear HTTP 422 validation response.
+For example, supply `factor_scores` with every configured factor, a `subject`,
+an ISO-8601 UTC `decision_at`, and `evidence_by_factor` like
+`{"demand_acceleration":[{"evidence_id":"...","version":1}]}` for persisted
+evidence. Market Opportunity continues to accept numeric factor scores
+directly. Missing, unexpected, and out-of-range factor scores return a clear
+HTTP 422 validation response.
 
 The playbook is loaded and validated when the application starts. Invalid or
 unreadable configuration prevents startup with a `PlaybookValidationError`
