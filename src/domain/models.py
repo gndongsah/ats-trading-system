@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, IntEnum
+from itertools import pairwise
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -41,11 +42,26 @@ class ValidationStage(str, Enum):
     CLOSED = "closed"
 
 
-class Regime(str, Enum):
-    RISK_ON = "risk_on"
-    NEUTRAL = "neutral"
-    RISK_OFF = "risk_off"
-    TRANSITION = "transition"
+class Regime(IntEnum):
+    RISK_ON = 1
+    RISK_ON_NARROW = 2
+    NEUTRAL_CHOP = 3
+    RISK_OFF = 4
+    CAPITULATION_REVERSAL = 5
+
+    def risk_multiplier(
+        self,
+        *,
+        side: "TradeSide | None" = None,
+        explicit_multiplier: Decimal | None = None,
+        special_setup: bool = False,
+    ) -> Decimal | None:
+        return resolve_regime_risk_multiplier(
+            self,
+            side=side,
+            explicit_multiplier=explicit_multiplier,
+            special_setup=special_setup,
+        )
 
 
 class Mood(str, Enum):
@@ -60,6 +76,59 @@ class EvidenceStatus(str, Enum):
     UNVERIFIED = "unverified"
     VERIFIED = "verified"
     REJECTED = "rejected"
+
+
+def resolve_regime_risk_multiplier(
+    regime: Regime,
+    *,
+    side: "TradeSide | None" = None,
+    explicit_multiplier: Decimal | None = None,
+    special_setup: bool = False,
+) -> Decimal | None:
+    """Return the playbook-defined risk multiplier for a regime.
+
+    Regimes 1-3 have fixed multipliers. Regime 4 requires an explicit long-side
+    policy decision within the allowed 0..0.25 range. Regime 5 is treated as a
+    special-case regime that requires a separately authorized setup or no trade.
+    """
+    if regime == Regime.RISK_ON:
+        return Decimal("1.00")
+    if regime == Regime.RISK_ON_NARROW:
+        return Decimal("0.75")
+    if regime == Regime.NEUTRAL_CHOP:
+        return Decimal("0.50")
+    if regime == Regime.RISK_OFF:
+        if side is not TradeSide.LONG:
+            raise ValueError(
+                "risk-off regime policy applies only to the long side and must be chosen explicitly"
+            )
+        if explicit_multiplier is None:
+            raise ValueError(
+                "risk-off regime requires an explicit long-side multiplier within 0..0.25"
+            )
+        if isinstance(explicit_multiplier, bool):
+            raise ValueError("risk-off multiplier must be a numeric value, not a boolean")
+        explicit = Decimal(explicit_multiplier)
+        if (
+            not explicit.is_finite()
+            or not Decimal(0) <= explicit <= Decimal("0.25")
+        ):
+            raise ValueError("risk-off long-side multiplier must be between 0 and 0.25")
+        return explicit
+    if regime == Regime.CAPITULATION_REVERSAL:
+        if not special_setup:
+            raise ValueError(
+                "capitulation/reversal requires a separately authorized special setup or no trade"
+            )
+        if explicit_multiplier is None:
+            return None
+        if isinstance(explicit_multiplier, bool):
+            raise ValueError("special-setup multiplier must be numeric, not a boolean")
+        explicit = Decimal(explicit_multiplier)
+        if not explicit.is_finite() or explicit < 0:
+            raise ValueError("special-setup multiplier must be a finite nonnegative value")
+        return explicit
+    raise ValueError(f"unsupported regime: {regime}")
 
 
 class OrderAction(str, Enum):
@@ -178,6 +247,7 @@ class RiskIntent(ImmutableModel):
 
 class TradePlan(ImmutableModel):
     id: UUID = Field(default_factory=uuid4)
+    trade_id: UUID = Field(default_factory=uuid4)
     version: int = Field(default=1, ge=1)
     supersedes_plan_id: UUID | None = None
     security: SecurityRef
@@ -220,6 +290,16 @@ class TradePlan(ImmutableModel):
         if stop_risk > self.risk_intent.stop_risk_budget:
             raise ValueError("trade quantity exceeds the declared stop-risk budget")
         return self
+
+    def validate_amendment_of(self, prior_plan: "TradePlan") -> None:
+        if self.trade_id != prior_plan.trade_id:
+            raise ValueError("amended plan must retain the prior plan's trade_id")
+        if self.version != prior_plan.version + 1:
+            raise ValueError("amended plan version must immediately follow the prior plan")
+        if self.supersedes_plan_id != prior_plan.id:
+            raise ValueError("amended plan must supersede the supplied prior plan")
+        if self.planned_at < prior_plan.planned_at:
+            raise ValueError("amended plan cannot predate the prior plan")
 
 
 class OrderIntent(ImmutableModel):
@@ -274,11 +354,32 @@ class TradeResult(ImmutableModel):
     realized_pnl: Decimal
     r_multiple: Decimal
     outcome: str = Field(min_length=1)
+    mae_r: Decimal | None = Field(default=None, ge=0)
+    mfe_r: Decimal | None = Field(default=None, ge=0)
+    excursion_source: str | None = None
 
     @field_validator("closed_at")
     @classmethod
     def close_time_is_utc(cls, value: datetime) -> datetime:
         return _require_utc(value)
+
+    @field_validator("excursion_source")
+    @classmethod
+    def excursion_source_is_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        source = value.strip()
+        if not source:
+            raise ValueError("excursion source must not be blank")
+        return source
+
+    @model_validator(mode="after")
+    def excursions_retain_their_source(self) -> "TradeResult":
+        if (self.mae_r is not None or self.mfe_r is not None) and (
+            self.excursion_source is None
+        ):
+            raise ValueError("MAE/MFE observations require an excursion source")
+        return self
 
 
 class JournalEntry(ImmutableModel):
@@ -288,6 +389,11 @@ class JournalEntry(ImmutableModel):
     fills: tuple[Fill, ...] = ()
     position_snapshots: tuple[PositionSnapshot, ...] = ()
     result: TradeResult | None = None
+    prior_plans: tuple[TradePlan, ...] = ()
+    plan_followed: bool | None = None
+    mood: Mood | None = None
+    lesson: str | None = None
+    thesis: str | None = None
     created_at: datetime
 
     @field_validator("created_at")
@@ -297,6 +403,18 @@ class JournalEntry(ImmutableModel):
 
     @model_validator(mode="after")
     def validate_lifecycle_links(self) -> "JournalEntry":
+        plans_by_id = {plan.id: plan for plan in (*self.prior_plans, self.plan)}
+        if len(plans_by_id) != len(self.prior_plans) + 1:
+            raise ValueError("journal plan history cannot repeat plan IDs")
+        plans_by_version = {plan.version: plan for plan in plans_by_id.values()}
+        if len(plans_by_version) != len(plans_by_id):
+            raise ValueError("journal plan history cannot repeat plan versions")
+        if any(plan.trade_id != self.plan.trade_id for plan in self.prior_plans):
+            raise ValueError("journal plan history must retain the same trade_id")
+        ordered_plans = sorted(plans_by_id.values(), key=lambda plan: plan.version)
+        for prior_plan, amended_plan in pairwise(ordered_plans):
+            amended_plan.validate_amendment_of(prior_plan)
+
         orders_by_id = {order.id: order for order in self.orders}
         if any(order.plan_id != self.plan.id for order in self.orders):
             raise ValueError("journal orders must reference the journal plan")
