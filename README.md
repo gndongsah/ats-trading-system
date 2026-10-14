@@ -28,27 +28,37 @@ available at `http://127.0.0.1:8000/docs`.
 
 ## Run with Docker
 
-With Docker and the Compose plugin installed, build the image and start the API
-with one command:
+With Docker and the Compose plugin installed, create a local `.env` from
+`.env.example`, replace both password placeholders, and start the stack:
 
 ```powershell
 docker compose up --build
 ```
 
-The API is available at `http://127.0.0.1:8000`; Compose binds it to localhost
-only and starts PostgreSQL with a persistent named volume. For local
-configuration, copy `.env.example` to `.env` and replace the development
-password. `.env` is ignored by Git. Keep the `DATABASE_URL` credentials in sync
-with the PostgreSQL variables; URL-encode reserved characters in the password.
-The example/default credentials are for local development only. Stop the stack
-with `Ctrl+C`, or run `docker compose down` in another terminal.
+Compose binds the API and PostgreSQL ports to localhost and keeps PostgreSQL
+data in the existing `postgres_data` named volume. `.env` is ignored by Git;
+never commit it. Choose URL-safe passwords for the two roles (or percent-encode
+reserved characters in the migration-owner password used in its URL).
+For an already initialized database volume, keep `POSTGRES_USER` and
+`POSTGRES_PASSWORD` matched to the existing migration-owner role; changing
+these container initialization variables does not rotate credentials stored
+in PostgreSQL. Set a new, private `ATS_APP_PASSWORD` for the runtime role.
+`provision-runtime-role` idempotently provisions the non-superuser `ats_app`
+role in the existing database without initializing or replacing the data
+volume. The one-shot `migrate` service applies Alembic using
+`ATS_MIGRATION_DATABASE_URL` and sets `ATS_RUNTIME_ROLE=ats_app` before
+migrations run. The API starts only after migrations complete and connects
+using `ats_app`, never the schema-owner credentials. To apply later migrations,
+run `docker compose run --rm migrate`; do not remove the `postgres_data`
+volume. Stop the stack with `Ctrl+C`, or run `docker compose stop`.
 
 ## Database foundation
 
 The application has a SQLAlchemy engine, declarative base, and request-scoped
 session dependency in `src/database.py`. Native runs default to a local SQLite
-URL; Docker Compose configures PostgreSQL using `DATABASE_URL`. The foundation
-does not yet define application tables or run migrations.
+URL; Docker Compose configures PostgreSQL with the restricted runtime
+`DATABASE_URL`. Migrations use the separate schema-owner URL, not the API
+connection.
 
 For local Python runs that need PostgreSQL, set `DATABASE_URL` in the process
 environment. Do not commit `.env` files or production credentials; use your
@@ -81,9 +91,60 @@ Run their focused tests with:
 python -m pytest tests/test_domain_models.py -v
 ```
 
-These models establish domain-level contracts only; persistent append-only
-records, Alembic migrations, evidence verification policy, and portfolio-level
-risk limits remain future implementation steps.
+These models establish immutable domain-level contracts. Append-only journal
+records and their PostgreSQL schema are implemented in ATS-004; evidence
+verification policy and portfolio-level risk limits remain future work.
+
+## ATS-004 PostgreSQL journal persistence
+
+SQLAlchemy 2.x mappings live in `src/persistence/models.py`; the
+`JournalRepository` stores immutable trade plans and score snapshots alongside
+orders, fills, position snapshots, results, and versioned journal feedback.
+JSONB payloads preserve the complete Pydantic contracts (including evidence,
+decimal values, risk intent, and plan history), while relational keys and
+constraints provide stable trade/plan identities and lifecycle references.
+Journal and score-snapshot JSONB documents carry explicit schema versions;
+read-time migrations support historical unversioned/version-1 snapshots
+without rewriting their decision-time records. PostgreSQL triggers reject
+updates and deletes from every journal table. Journal edits are stored as new
+revisions; PostgreSQL serializes writes per trade with a transaction-scoped
+advisory lock, so the runtime role needs no row-update privilege. Callers own
+the transaction and should write with
+`with session.begin():`. Pass `expected_revision` to `save` when a stale
+concurrent append must be rejected rather than automatically assigned the next
+revision.
+
+Compose provisions `ats_app` and applies pending schema revisions as the
+owner before starting the API. For native migrations, provision the runtime
+role first and set both `ATS_RUNTIME_ROLE=ats_app` and
+`ATS_MIGRATION_DATABASE_URL` to the schema-owner connection before running:
+
+```powershell
+python -m alembic upgrade head
+```
+
+The ATS-004 privilege migration requires `ATS_RUNTIME_ROLE` to name a
+pre-created, non-superuser role distinct from the migration/schema owner. The
+Compose `provision-runtime-role` step creates `ats_app` with login but no
+superuser, database/role creation, inheritance, or RLS-bypass privileges, and
+revokes membership in `POSTGRES_USER`. The migration grants the role schema
+`USAGE` and table `SELECT`/`INSERT` only; the API uses the role, while
+`ATS_MIGRATION_DATABASE_URL` is used only by Alembic. The runtime role must not
+own protected tables or have membership in their owner roles. Do not grant it
+`UPDATE`, `DELETE`, `TRUNCATE`, trigger administration, or schema DDL
+privileges.
+
+SQLite remains available for fast repository unit tests, but does not install
+the PostgreSQL append-only triggers. Run PostgreSQL migration and integration
+tests against the dedicated `ats_test` database by setting
+`ATS_TEST_DATABASE_URL`; the test suite refuses any other database name,
+creates and drops an isolated schema there, and uses a temporary non-owner
+runtime role:
+
+```powershell
+$env:ATS_TEST_DATABASE_URL = "postgresql+psycopg://user:password@localhost:5432/ats_test"
+python -m pytest tests/test_postgres_persistence.py -v
+```
 
 ## Continuous integration
 
