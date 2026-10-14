@@ -30,10 +30,10 @@ class ScoreSnapshotRecord(Base):
     __tablename__ = "ats_score_snapshots"
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
-    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    snapshot_data: Mapped[dict[str, Any]] = mapped_column(
-        JSON_DOCUMENT, nullable=False
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
     )
+    snapshot_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
 
 
 class TradePlanRecord(Base):
@@ -61,7 +61,9 @@ class TradePlanRecord(Base):
         ForeignKey("ats_score_snapshots.id"),
         nullable=False,
     )
-    planned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    planned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     plan_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
 
 
@@ -133,7 +135,9 @@ class JournalEntryRecord(Base):
     plan_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("ats_trade_plans.id"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     plan_followed: Mapped[bool | None]
     mood: Mapped[str | None] = mapped_column(String(32), nullable=True)
     lesson: Mapped[str | None] = mapped_column(String, nullable=True)

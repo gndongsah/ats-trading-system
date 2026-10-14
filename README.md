@@ -117,7 +117,9 @@ revision.
 Compose provisions `ats_app` and applies pending schema revisions as the
 owner before starting the API. For native migrations, provision the runtime
 role first and set both `ATS_RUNTIME_ROLE=ats_app` and
-`ATS_MIGRATION_DATABASE_URL` to the schema-owner connection before running:
+`ATS_MIGRATION_DATABASE_URL` to the schema-owner connection before running.
+Alembic intentionally fails when this explicit migration URL is missing;
+neither `DATABASE_URL` nor the `alembic.ini` default is a migration fallback:
 
 ```powershell
 python -m alembic upgrade head

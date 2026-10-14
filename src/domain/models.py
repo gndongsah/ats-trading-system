@@ -107,12 +107,11 @@ def resolve_regime_risk_multiplier(
                 "risk-off regime requires an explicit long-side multiplier within 0..0.25"
             )
         if isinstance(explicit_multiplier, bool):
-            raise ValueError("risk-off multiplier must be a numeric value, not a boolean")
+            raise ValueError(
+                "risk-off multiplier must be a numeric value, not a boolean"
+            )
         explicit = Decimal(explicit_multiplier)
-        if (
-            not explicit.is_finite()
-            or not Decimal(0) <= explicit <= Decimal("0.25")
-        ):
+        if not explicit.is_finite() or not Decimal(0) <= explicit <= Decimal("0.25"):
             raise ValueError("risk-off long-side multiplier must be between 0 and 0.25")
         return explicit
     if regime == Regime.CAPITULATION_REVERSAL:
@@ -126,7 +125,9 @@ def resolve_regime_risk_multiplier(
             raise ValueError("special-setup multiplier must be numeric, not a boolean")
         explicit = Decimal(explicit_multiplier)
         if not explicit.is_finite() or explicit < 0:
-            raise ValueError("special-setup multiplier must be a finite nonnegative value")
+            raise ValueError(
+                "special-setup multiplier must be a finite nonnegative value"
+            )
         return explicit
     raise ValueError(f"unsupported regime: {regime}")
 
@@ -295,7 +296,9 @@ class TradePlan(ImmutableModel):
         if self.trade_id != prior_plan.trade_id:
             raise ValueError("amended plan must retain the prior plan's trade_id")
         if self.version != prior_plan.version + 1:
-            raise ValueError("amended plan version must immediately follow the prior plan")
+            raise ValueError(
+                "amended plan version must immediately follow the prior plan"
+            )
         if self.supersedes_plan_id != prior_plan.id:
             raise ValueError("amended plan must supersede the supplied prior plan")
         if self.planned_at < prior_plan.planned_at:

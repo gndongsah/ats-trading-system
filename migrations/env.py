@@ -4,6 +4,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from migrations.configuration import migration_database_url
 from src.database import Base
 from src.persistence import models  # noqa: F401
 
@@ -16,9 +17,7 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    url = os.environ.get("ATS_MIGRATION_DATABASE_URL") or os.environ.get("DATABASE_URL")
-    if url is None:
-        return config.get_main_option("sqlalchemy.url")
+    url = migration_database_url(os.environ)
     return url.replace("%", "%%")
 
 

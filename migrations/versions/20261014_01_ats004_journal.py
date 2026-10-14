@@ -3,6 +3,7 @@
 Revision ID: 20261014_01
 Revises:
 """
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -14,20 +15,35 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table("ats_trades", sa.Column("trade_id", postgresql.UUID(as_uuid=True), primary_key=True))
+    op.create_table(
+        "ats_trades",
+        sa.Column("trade_id", postgresql.UUID(as_uuid=True), primary_key=True),
+    )
     op.create_table(
         "ats_score_snapshots",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("decided_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("snapshot_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "snapshot_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
     )
     op.create_table(
         "ats_trade_plans",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("trade_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ats_trades.trade_id"), nullable=False),
+        sa.Column(
+            "trade_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ats_trades.trade_id"),
+            nullable=False,
+        ),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("supersedes_plan_id", postgresql.UUID(as_uuid=True)),
-        sa.Column("score_snapshot_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ats_score_snapshots.id"), nullable=False),
+        sa.Column(
+            "score_snapshot_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ats_score_snapshots.id"),
+            nullable=False,
+        ),
         sa.Column("planned_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("plan_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.UniqueConstraint("trade_id", "version", name="uq_ats_plan_trade_version"),
@@ -41,45 +57,105 @@ def upgrade() -> None:
     op.create_table(
         "ats_order_intents",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("trade_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ats_trades.trade_id"), nullable=False),
-        sa.Column("plan_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ats_trade_plans.id"), nullable=False),
-        sa.Column("order_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "trade_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ats_trades.trade_id"),
+            nullable=False,
+        ),
+        sa.Column(
+            "plan_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ats_trade_plans.id"),
+            nullable=False,
+        ),
+        sa.Column(
+            "order_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
     )
     op.create_table(
         "ats_fills",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("trade_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ats_trades.trade_id"), nullable=False),
-        sa.Column("order_intent_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ats_order_intents.id"), nullable=False),
+        sa.Column(
+            "trade_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ats_trades.trade_id"),
+            nullable=False,
+        ),
+        sa.Column(
+            "order_intent_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ats_order_intents.id"),
+            nullable=False,
+        ),
         sa.Column("fill_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     )
     op.create_table(
         "ats_position_snapshots",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("trade_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ats_trades.trade_id"), nullable=False),
-        sa.Column("plan_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ats_trade_plans.id"), nullable=False),
-        sa.Column("snapshot_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "trade_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ats_trades.trade_id"),
+            nullable=False,
+        ),
+        sa.Column(
+            "plan_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ats_trade_plans.id"),
+            nullable=False,
+        ),
+        sa.Column(
+            "snapshot_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
     )
     op.create_table(
         "ats_trade_results",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("trade_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ats_trades.trade_id"), nullable=False),
-        sa.Column("plan_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ats_trade_plans.id"), nullable=False),
-        sa.Column("result_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "trade_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ats_trades.trade_id"),
+            nullable=False,
+        ),
+        sa.Column(
+            "plan_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ats_trade_plans.id"),
+            nullable=False,
+        ),
+        sa.Column(
+            "result_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
         sa.UniqueConstraint("plan_id", name="uq_ats_result_plan"),
     )
     op.create_table(
         "ats_journal_entries",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("revision", sa.Integer(), primary_key=True),
-        sa.Column("trade_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ats_trades.trade_id"), nullable=False),
-        sa.Column("plan_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ats_trade_plans.id"), nullable=False),
+        sa.Column(
+            "trade_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ats_trades.trade_id"),
+            nullable=False,
+        ),
+        sa.Column(
+            "plan_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ats_trade_plans.id"),
+            nullable=False,
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("plan_followed", sa.Boolean()),
         sa.Column("mood", sa.String(length=32)),
         sa.Column("lesson", sa.String()),
         sa.Column("thesis", sa.String()),
-        sa.Column("entry_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.UniqueConstraint("trade_id", "revision", name="uq_ats_journal_trade_revision"),
+        sa.Column(
+            "entry_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
+        sa.UniqueConstraint(
+            "trade_id", "revision", name="uq_ats_journal_trade_revision"
+        ),
         sa.CheckConstraint("revision >= 1", name="ck_ats_journal_revision_positive"),
     )
 

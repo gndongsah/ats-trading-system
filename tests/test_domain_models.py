@@ -91,7 +91,9 @@ def test_fixed_regime_risk_multipliers(regime, expected):
 
 def test_risk_off_requires_explicit_long_side_policy_in_range():
     with pytest.raises(ValueError, match="only to the long side"):
-        resolve_regime_risk_multiplier(Regime.RISK_OFF, explicit_multiplier=Decimal("0.1"))
+        resolve_regime_risk_multiplier(
+            Regime.RISK_OFF, explicit_multiplier=Decimal("0.1")
+        )
     with pytest.raises(ValueError, match="only to the long side"):
         resolve_regime_risk_multiplier(
             Regime.RISK_OFF,
@@ -342,7 +344,10 @@ def test_trade_result_excursions_are_optional_nonnegative_and_provenanced():
         "outcome": "flat",
     }
     assert TradeResult(**result_values).mae_r is None
-    assert TradeResult(**result_values, excursion_source="history unavailable").mfe_r is None
+    assert (
+        TradeResult(**result_values, excursion_source="history unavailable").mfe_r
+        is None
+    )
 
     with pytest.raises(ValidationError, match="greater than or equal to 0"):
         TradeResult(
