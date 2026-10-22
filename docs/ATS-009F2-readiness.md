@@ -101,18 +101,19 @@ no cash flows.
 |---|---|---|
 | API account identity | Stable broker account identity evidence tied to the intended account, not just a selected API ID or masked suffix | **UNVERIFIED**; desktop/API binding is not established |
 | Broker event/valuation time | Documented broker-owned timestamp field, timezone, semantics, precision, and freshness/order guarantees | **UNVERIFIED**; local `observed_at` is distinct and is not broker time |
-| Cash-activity history completeness | Documented query window/defaults, earliest available history, terminal-page semantics, and coverage across the required period | **UNVERIFIED**; terminal pagination only describes the returned account-only request sequence. Empty results do not prove no flows or complete history |
-| Cash-flow categories and signs | Official definitions and verified examples/corrections establishing which records are external flows and their NLV sign convention | **UNVERIFIED**; raw category and amount must not be interpreted |
+| Cash-activity history completeness | Documented query window/defaults, earliest available history, terminal-page semantics, and coverage across the required period | **UNVERIFIED**; terminal pagination only describes the returned request sequence. Empty results do not prove no flows or complete history |
+| Cash-flow categories and signs | Official definitions and verified examples/corrections establishing which records are external flows and their NLV sign convention | **PARTIALLY DOCUMENTED**; official activity type/subtype enums and credit/debit amount semantics are now parsed as raw evidence; external-flow eligibility and reversal linkage remain unverified |
 | Opening equity | Authenticated, complete, reconciled broker NLV frozen at each daily and weekly period boundary, with correction/restatement rules | **UNVERIFIED**; a balance response or current NLV does not establish a frozen opening |
 | Positions completeness | Broker contract and reconciliation evidence proving the positions response includes all relevant holdings and exposure | **UNVERIFIED**; item count/shape is not completeness evidence |
 | Reconciliation | Reproducible equation matching opening NLV, current NLV, signed external flows, corporate actions/fees, and corrections at aligned timestamps | **NOT PERFORMED** |
 | Enforcement authority | All identity, timestamp, completeness, sign, opening, reconciliation, calendar and ordering gates independently satisfied | **NO-GO**; `enforcement_eligible=False` |
 
-The runner's shape output is descriptive evidence only. Field names that resemble
-timestamps or amounts do not prove their semantics. No category is inferred,
-no sign is applied, and no empty activity response is treated as a complete
-history. Cash activity records remain provisional and are not parsed into
-enforcement inputs.
+The runner's shape output is descriptive evidence only. The documented cash
+activity record fields are parsed by the separate evidence-only adapter
+described in [ATS-009F3](./ATS-009F3-cash-activity-evidence.md). No external-flow
+classification or risk sign is inferred, `biz_time` is retained raw until its
+format/timezone are verified, and no empty activity response is treated as a
+complete history. Cash activity evidence is not an enforcement input.
 
 ## Next acceptance gates
 
