@@ -167,3 +167,38 @@ def test_transactional_provider_without_version_or_sticky_flags_is_denied(tmp_pa
 def test_loss_state_rejects_invalid_version():
     with pytest.raises(ValueError):
         LossLockState(account_id=UUID(int=1), as_of=NOW, state_version=0)
+
+
+@pytest.mark.parametrize("provider_kind", ["transactional", "absent"])
+def test_unbound_legacy_reservation_cannot_replay_with_unverifiable_loss_state(
+    tmp_path, provider_kind
+):
+    engine, factory, legacy, account_id, plan_id = create_service_and_db(tmp_path)
+    try:
+        first = legacy.authorize_with_retry(
+            factory, plan_id=plan_id, idempotency_key="legacy-unbound"
+        )
+        assert first.decision is not RiskDecision.DENY
+        with factory() as session:
+            event = session.scalar(select(RiskReservationEventRecord))
+            assert "loss_state" not in event.event_data
+        provider = (
+            VersionedProvider(account_id) if provider_kind == "transactional" else None
+        )
+        service = _service(account_id, provider)
+        replay = service.authorize_with_retry(
+            factory, plan_id=plan_id, idempotency_key="legacy-unbound"
+        )
+        assert replay.decision is RiskDecision.DENY
+        assert replay.reason == Layer3Reason.LOSS_STATE_VERSION_CONFLICT
+        assert not replay.execution_enabled
+        with factory() as session:
+            assert (
+                session.scalar(
+                    select(func.count()).select_from(RiskReservationEventRecord)
+                )
+                == 1
+            )
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()

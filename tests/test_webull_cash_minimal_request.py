@@ -31,7 +31,9 @@ def _activity_api(capture):
 def test_minimal_request_has_only_account_id_and_v3_header():
     capture = _Capture()
     gateway = OfficialSdkCashActivitiesGateway(_activity_api(capture))
-    gateway.list_cash_activities("SYNTH-ACCT", start_time=None, end_time=None, pagination_key=None)
+    gateway.list_cash_activities(
+        "SYNTH-ACCT", start_time=None, end_time=None, pagination_key=None
+    )
 
     (request,) = capture.requests
     assert request.get_query_params() == {"account_id": "SYNTH-ACCT"}
@@ -47,13 +49,18 @@ def test_cursor_is_sent_only_when_present_and_empty_string_is_dropped():
     capture = _Capture()
     gateway = OfficialSdkCashActivitiesGateway(_activity_api(capture))
     gateway.list_cash_activities("A", start_time=None, end_time=None, pagination_key="")
-    gateway.list_cash_activities("A", start_time=None, end_time=None, pagination_key="c1")
+    gateway.list_cash_activities(
+        "A", start_time=None, end_time=None, pagination_key="c1"
+    )
     assert "pagination_key" not in capture.requests[0].get_query_params()
     assert capture.requests[1].get_query_params()["pagination_key"] == "c1"
 
 
 def test_shape_reports_names_and_types_only():
-    body = {"data": [{"activity_id": "SECRET-1", "amount": "123.45"}], "pagination_key": "TOKEN"}
+    body = {
+        "data": [{"activity_id": "SECRET-1", "amount": "123.45"}],
+        "pagination_key": "TOKEN",
+    }
     shape = describe_response_shape(body)
     rendered = repr(shape)
     assert shape["activity_item_fields"] == {"activity_id": "str", "amount": "str"}
@@ -112,7 +119,15 @@ class _Trade:
 
         class Account:
             def get_account_list(self):
-                return _Resp([{"account_id": "FULLID-0AA8", "account_type": "CASH", "account_number": "x0AA8"}])
+                return _Resp(
+                    [
+                        {
+                            "account_id": "FULLID-0AA8",
+                            "account_type": "CASH",
+                            "account_number": "x0AA8",
+                        }
+                    ]
+                )
 
         class Activity:
             def list_activities(self, account_id, **kwargs):
@@ -128,12 +143,19 @@ class _Trade:
 def test_runner_one_request_no_optional_params_and_no_values(runner, capsys):
     trade = _Trade({"data": [{"activity_id": "TXN-SECRET", "amount": "9.99"}]})
     code = runner.run(
-        environ={}, input_fn=lambda _: "1", isatty=True,
-        build_trade_client=lambda k, s: trade, keyring_module=_Keyring(),
+        environ={},
+        input_fn=lambda _: "1",
+        isatty=True,
+        build_trade_client=lambda k, s: trade,
+        keyring_module=_Keyring(),
     )
     out = capsys.readouterr().out
     assert code == 0 and len(trade.calls) == 1
-    assert trade.calls[0] == {"start_time": None, "end_time": None, "pagination_key": None}
+    assert trade.calls[0] == {
+        "start_time": None,
+        "end_time": None,
+        "pagination_key": None,
+    }
     assert "activity_item_fields" in out and "UNVERIFIED" in out
     for leak in ("TXN-SECRET", "9.99", "FULLID"):
         assert leak not in out
@@ -147,8 +169,11 @@ def test_runner_417_reports_status_and_code_only(runner, capsys):
 
     trade = _Trade(error=ServerException())
     code = runner.run(
-        environ={}, input_fn=lambda _: "1", isatty=True,
-        build_trade_client=lambda k, s: trade, keyring_module=_Keyring(),
+        environ={},
+        input_fn=lambda _: "1",
+        isatty=True,
+        build_trade_client=lambda k, s: trade,
+        keyring_module=_Keyring(),
     )
     out = capsys.readouterr().out
     assert code == 1 and len(trade.calls) == 1
@@ -159,8 +184,11 @@ def test_runner_417_reports_status_and_code_only(runner, capsys):
 def test_runner_cancel_makes_no_cash_request(runner, capsys):
     trade = _Trade({"data": []})
     code = runner.run(
-        environ={}, input_fn=lambda _: "", isatty=True,
-        build_trade_client=lambda k, s: trade, keyring_module=_Keyring(),
+        environ={},
+        input_fn=lambda _: "",
+        isatty=True,
+        build_trade_client=lambda k, s: trade,
+        keyring_module=_Keyring(),
     )
     assert code == 1 and trade.calls == []
     assert "CANCELLED" in capsys.readouterr().out

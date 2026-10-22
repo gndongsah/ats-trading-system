@@ -54,7 +54,9 @@ def env_pair(key=ENV_KEY, secret=ENV_SECRET):
 
 
 class ServerException(Exception):  # same name and attributes as the SDK class
-    def __init__(self, code="INVALID_APP_KEY", msg=LEAK, http_status=401, request_id="req"):
+    def __init__(
+        self, code="INVALID_APP_KEY", msg=LEAK, http_status=401, request_id="req"
+    ):
         super().__init__()
         self.error_code = code
         self.error_msg = msg
@@ -70,7 +72,9 @@ class ServerException(Exception):  # same name and attributes as the SDK class
 
 def test_server_exception_reduced_to_status_and_code_only():
     failure = classify_sdk_exception("client initialization", ServerException())
-    assert isinstance(failure, SdkRequestFailure) and isinstance(failure, TransportError)
+    assert isinstance(failure, SdkRequestFailure) and isinstance(
+        failure, TransportError
+    )
     assert (failure.http_status, failure.error_code) == (401, "INVALID_APP_KEY")
     assert failure.error_type == "ServerException"
     assert LEAK not in str(failure) and LEAK not in repr(failure)
@@ -78,10 +82,15 @@ def test_server_exception_reduced_to_status_and_code_only():
 
 @pytest.mark.parametrize("status", [True, 99, 600, "401", None, 4.01])
 def test_unreliable_http_status_is_unknown(status):
-    assert classify_sdk_exception("op", ServerException(http_status=status)).http_status is None
+    assert (
+        classify_sdk_exception("op", ServerException(http_status=status)).http_status
+        is None
+    )
 
 
-@pytest.mark.parametrize("code", ["has space", f"{LEAK} detail", "x" * 65, "", None, 7, "a/b"])
+@pytest.mark.parametrize(
+    "code", ["has space", f"{LEAK} detail", "x" * 65, "", None, 7, "a/b"]
+)
 def test_unsafe_error_code_is_dropped(code):
     failure = classify_sdk_exception("op", ServerException(code=code))
     assert failure.error_code is None
@@ -185,15 +194,23 @@ def test_real_sdk_failure_logging_path_is_silent(tmp_path, monkeypatch, capsys):
 
 
 def test_keyring_wins_when_both_sources_complete():
-    assert credential_source(environ=env_pair(), keyring_module=keyring_pair()) == "keyring"
+    assert (
+        credential_source(environ=env_pair(), keyring_module=keyring_pair())
+        == "keyring"
+    )
     creds = load_sandbox_credentials(environ=env_pair(), keyring_module=keyring_pair())
     assert creds.reveal() == (KR_KEY, KR_SECRET)
 
 
 def test_environment_is_used_only_when_keyring_has_nothing():
-    assert credential_source(environ=env_pair(), keyring_module=FakeKeyring()) == "environment"
     assert (
-        credential_source(environ=env_pair(), keyring_module=FakeKeyring(error=RuntimeError(LEAK)))
+        credential_source(environ=env_pair(), keyring_module=FakeKeyring())
+        == "environment"
+    )
+    assert (
+        credential_source(
+            environ=env_pair(), keyring_module=FakeKeyring(error=RuntimeError(LEAK))
+        )
         == "environment"
     )
 
@@ -201,25 +218,46 @@ def test_environment_is_used_only_when_keyring_has_nothing():
 def test_missing_status_when_nothing_or_partial_or_backend_down():
     assert credential_status(environ={}, keyring_module=FakeKeyring()) == "MISSING"
     assert credential_source(environ={}, keyring_module=FakeKeyring()) == "MISSING"
-    assert credential_status(environ={}, keyring_module=FakeKeyring({K: KR_KEY})) == "MISSING"
     assert (
-        credential_status(environ={}, keyring_module=FakeKeyring(error=RuntimeError(LEAK)))
+        credential_status(environ={}, keyring_module=FakeKeyring({K: KR_KEY}))
+        == "MISSING"
+    )
+    assert (
+        credential_status(
+            environ={}, keyring_module=FakeKeyring(error=RuntimeError(LEAK))
+        )
         == "MISSING"
     )
 
 
 def test_partial_keyring_never_falls_back_to_a_complete_environment_pair():
-    assert credential_source(environ=env_pair(), keyring_module=FakeKeyring({K: KR_KEY})) == "MISSING"
+    assert (
+        credential_source(environ=env_pair(), keyring_module=FakeKeyring({K: KR_KEY}))
+        == "MISSING"
+    )
 
 
 def test_compare_sources_match_mismatch_unavailable():
     same = env_pair(KR_KEY, KR_SECRET)
     assert compare_sources(environ=same, keyring_module=keyring_pair()) == "MATCH"
-    assert compare_sources(environ=env_pair(), keyring_module=keyring_pair()) == "MISMATCH"
-    assert compare_sources(environ=env_pair(KR_KEY, "other-secret"), keyring_module=keyring_pair()) == "MISMATCH"
-    assert compare_sources(environ=env_pair(), keyring_module=FakeKeyring()) == "UNAVAILABLE"
+    assert (
+        compare_sources(environ=env_pair(), keyring_module=keyring_pair()) == "MISMATCH"
+    )
+    assert (
+        compare_sources(
+            environ=env_pair(KR_KEY, "other-secret"), keyring_module=keyring_pair()
+        )
+        == "MISMATCH"
+    )
+    assert (
+        compare_sources(environ=env_pair(), keyring_module=FakeKeyring())
+        == "UNAVAILABLE"
+    )
     assert compare_sources(environ={}, keyring_module=keyring_pair()) == "UNAVAILABLE"
-    assert compare_sources(environ={K: ENV_KEY}, keyring_module=keyring_pair()) == "UNAVAILABLE"
+    assert (
+        compare_sources(environ={K: ENV_KEY}, keyring_module=keyring_pair())
+        == "UNAVAILABLE"
+    )
 
 
 # ---- diagnostic runner --------------------------------------------------------
@@ -274,7 +312,9 @@ def test_runner_reports_init_failure_phase_status_and_code_only(runner, capsys):
     def build(key, secret):
         raise classify_sdk_exception("client initialization", ServerException())
 
-    code = runner.run(environ=env_pair(), keyring_module=keyring_pair(), build_trade_client=build)
+    code = runner.run(
+        environ=env_pair(), keyring_module=keyring_pair(), build_trade_client=build
+    )
     out = capsys.readouterr().out
 
     assert code == 1
@@ -302,7 +342,10 @@ def test_runner_reports_account_list_phase_failure_with_one_request(runner, caps
 
 
 def test_runner_success_prints_count_only_and_no_ids(runner, capsys):
-    accounts = [{"account_id": "FULL-ID-AAAA-0001"}, {"account_id": "FULL-ID-BBBB-0002"}]
+    accounts = [
+        {"account_id": "FULL-ID-AAAA-0001"},
+        {"account_id": "FULL-ID-BBBB-0002"},
+    ]
     trade = Trade(list_result=Resp(accounts))
     code = runner.run(
         environ={}, keyring_module=keyring_pair(), build_trade_client=lambda k, s: trade
@@ -318,12 +361,20 @@ def test_runner_success_prints_count_only_and_no_ids(runner, capsys):
 
 def test_runner_blocks_without_credentials_or_with_debug(runner, capsys):
     built = []
-    assert runner.run(environ={}, keyring_module=FakeKeyring(), build_trade_client=built.append) == 2
-    assert runner.run(
-        environ={**env_pair(), "WEBULL_API_DEBUG": "sdk"},
-        keyring_module=keyring_pair(),
-        build_trade_client=built.append,
-    ) == 2
+    assert (
+        runner.run(
+            environ={}, keyring_module=FakeKeyring(), build_trade_client=built.append
+        )
+        == 2
+    )
+    assert (
+        runner.run(
+            environ={**env_pair(), "WEBULL_API_DEBUG": "sdk"},
+            keyring_module=keyring_pair(),
+            build_trade_client=built.append,
+        )
+        == 2
+    )
     out = capsys.readouterr().out
     assert built == []
     for secret in (KR_KEY, KR_SECRET, ENV_KEY, ENV_SECRET):
@@ -332,5 +383,12 @@ def test_runner_blocks_without_credentials_or_with_debug(runner, capsys):
 
 def test_runner_source_has_no_other_endpoints_or_secret_output(runner):
     source = RUNNER.read_text(encoding="utf-8")
-    for token in ("place_order", "order_v", "get_account_balance", "get_account_position", "list_activities", "set_password"):
+    for token in (
+        "place_order",
+        "order_v",
+        "get_account_balance",
+        "get_account_position",
+        "list_activities",
+        "set_password",
+    ):
         assert token not in source

@@ -2783,3 +2783,39 @@ def test_f1_retry_helper_handles_real_deadlock(migrated_postgres_engine):
         assert c.execute(
             text("SELECT value FROM f1_deadlock ORDER BY id")
         ).scalars().all() == [2, 2]
+
+
+@pytest.mark.parametrize("provider_available", [False, True])
+def test_f1_unbound_legacy_replay_is_denied_after_provider_change(
+    migrated_postgres_engine, provider_available
+):
+    factory, legacy, account_id, entries = _postgres_layer3_setup(
+        migrated_postgres_engine
+    )
+    first = legacy.authorize_with_retry(
+        factory, plan_id=entries[0].plan.id, idempotency_key="f1-unbound-legacy"
+    )
+    assert first.decision is not RiskDecision.DENY
+    provider = RepositoryLossLockProvider() if provider_available else None
+    service = Layer3AuthorizationService(
+        policy=POSTGRES_RISK_POLICY,
+        taxonomy=POSTGRES_RISK_TAXONOMY,
+        loss_locks=provider,
+        principal_provider=_PostgresPrincipalProvider(account_id),
+        snapshot_verifier=_PostgresSnapshotVerifier(),
+        ats009_policy_version="ATS-009-v0.1",
+        clock=lambda: POSTGRES_RISK_NOW,
+    )
+    replay = service.authorize_with_retry(
+        factory, plan_id=entries[0].plan.id, idempotency_key="f1-unbound-legacy"
+    )
+    assert replay.decision is RiskDecision.DENY
+    assert replay.reason == Layer3Reason.LOSS_STATE_VERSION_CONFLICT.value
+    assert not replay.execution_enabled
+    with factory() as session:
+        event = session.scalar(select(RiskReservationEventRecord))
+        assert "loss_state" not in event.event_data
+        assert (
+            session.scalar(select(func.count()).select_from(RiskReservationEventRecord))
+            == 1
+        )

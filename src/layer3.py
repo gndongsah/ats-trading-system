@@ -640,9 +640,13 @@ class Layer3AuthorizationService:
         event_data: dict[str, object],
     ) -> bool:
         binding = event_data.get("loss_state")
-        if binding is None:
-            return True
         provider = self._loss_locks
+        if binding is None:
+            # Legacy decisions cannot prove freshness under a transactional
+            # provider, or when the evidence provider is unavailable.
+            return provider is not None and not isinstance(
+                provider, TransactionalLossLockProvider
+            )
         if not isinstance(provider, TransactionalLossLockProvider) or not isinstance(
             binding, dict
         ):

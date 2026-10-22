@@ -44,3 +44,19 @@ Work runtime note: only uid 0 is mapped and each command has isolated networking
 The Work agent directly reran the supplied implementation and found the timezone defect; it also authored these F1 changes. This is independently executed evidence relative to the earlier coding-agent report, **not independent reviewer approval of the new diff**. A separate reviewer must inspect the final commit/diff and rerun these cases. In particular, review SQLSTATE policy, trusted local-only provider contracts, replay consumers and loss-state/version/account-lock coupling.
 
 Authenticated broker/opening equity/flow/calendar/reconciliation evidence (F2), external diagnostic runners and Sprint 3 acceptance remain incomplete. No ATS-009 enforcement, Layer 3 trading authorization, paper orders or live orders are approved.
+
+## Independent review supplied by owner — 2026-10-22
+
+The uploaded review transcript (`Pasted text(20261022-193952).txt`) recommends **changes requested** for commit `55a774b`; no GitHub approval was submitted. It reports 559 passed / 0 skipped on disposable PostgreSQL 16 for that original commit, plus focused/offline validation of a local fix. Those are reviewer-reported results; Work has not independently reproduced the zero-skip run. The transcript's offline counts differ across its worktrees and must not be combined into one result or treated as revised-head PostgreSQL approval.
+
+Finding: `_loss_binding_is_current` accepted an absent binding even with a transactional or missing provider. Reproduction added here failed before the fix for both cases. Missing bindings now fail closed for those providers; legacy non-transactional replay remains unchanged. Added two SQLite boundary regressions and two PostgreSQL boundary regressions; both assert denial without an additional reservation.
+
+The reviewer also reported formatter failures. GitHub job 120018163970 confirmed Ruff formatting failed and both PostgreSQL and full-suite steps were skipped. Seven pre-existing Webull Python files were formatted; AST comparisons against their original source proved no syntax-tree change. CI now installs `.[dev,webull]` because existing SDK tests import Webull without an optional-dependency skip.
+
+The reviewer reports that the owner's local calendar pin matches the PR's dependency change. Work has not accessed or modified the owner's Windows worktree, local fixes, stashes or other unpushed files. The replay fix was reproduced and implemented on the PR branch independently of those local edits.
+
+The revised head still needs reviewer confirmation and successful GitHub checks. No merge, enforcement or order authorization follows from these revisions.
+
+### Revised Work validation
+
+Post-fix full suite on a fresh disposable PostgreSQL 16.15 cluster: **530 passed, 33 skipped**, including **46 PostgreSQL tests with zero PostgreSQL skips**. All skips remain absent external Webull diagnostic/runner scripts. Focused Layer 3 tests: **36 passed**. Repository-wide Ruff lint, Ruff format check and diff whitespace check passed. These results cover the revised source; they are author-executed verification, not independent approval.
