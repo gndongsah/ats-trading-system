@@ -1,9 +1,8 @@
-"""Fail-closed, read-only evidence collection for Webull cash activities.
+"""Fail-closed, read-only evidence parsing for Webull cash activities.
 
-The SDK documents the request endpoint and cursor protocol, but Webull's
-published Trading API account reference does not currently define this
-endpoint's response schema or category/sign semantics. Parsed records are
-therefore evidence only and are never enforcement eligible.
+The documented record fields are retained as evidence only. Account-flow
+classification, reversal linkage, and broker-time interpretation remain
+unverified and are never enforcement eligible.
 """
 
 from __future__ import annotations
@@ -12,7 +11,7 @@ import hashlib
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
@@ -28,8 +27,124 @@ from src.webull_sandbox_readonly import (
 )
 
 _DECIMAL_PATTERN = re.compile(r"[+-]?\d+(\.\d+)?")
+_QUERY_TIME_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z")
+_TRADE_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
+_ACTIVITY_SUBTYPES = {
+    "TRADE": frozenset(
+        {
+            "BUY",
+            "SELL",
+            "BUY_CANCELLED",
+            "SELL_CANCELLED",
+            "PENNY_FOR_LOT",
+            "FX_EXCHANGE",
+        }
+    ),
+    "DEPOSIT": frozenset(
+        {"WIRE", "ACH", "REVERSAL", "CHECK", "ACH_REVERSE", "INTERNAL_TRANSFER"}
+    ),
+    "WITHDRAW": frozenset({"WIRE", "ACH", "REVERSAL", "CHECK", "INTERNAL_TRANSFER"}),
+    "FEES": frozenset(
+        {
+            "WIRE_FEE",
+            "REVERSAL_FEE",
+            "TRANSFER_ACATS",
+            "CA_HANDLING_FEE",
+            "ADR",
+            "PAPER_STATEMENT_FEE",
+            "PAPER_CONFIRM_FEE",
+            "WRITE_OFF",
+            "CHECK_FEE",
+            "ADVISORY_FEE",
+            "SUBSCRIPTION_FEE",
+            "SERVICE_FEE",
+            "ACH_REVERSE_FEE",
+            "OTHER",
+        }
+    ),
+    "TRANSFER": frozenset({"ACATS_IN", "ACATS_OUT", "INTERNAL_TRANSFER", "BANK_SWEEP"}),
+    "DIVIDENDS": frozenset(
+        {"INCOME", "PAYMENT_IN_LIEU", "CASH_IN_LIEU", "LP_DISTRIBUTION"}
+    ),
+    "TAX": frozenset(
+        {
+            "FOREIGN_TAX_WITHHELD",
+            "US_TAX_WITHHOLDING",
+            "IRA_FED_WITHHOLDING",
+            "STATE_WITHHOLDING",
+            "WITHHOLDING_TAX",
+            "GP_TAX_WITHHELD",
+            "OTHER",
+        }
+    ),
+    "INTERESTS": frozenset(
+        {
+            "CREDIT",
+            "DEBIT",
+            "STOCK_BORROW_INTEREST",
+            "SECURITIES_LENDING_INCOME",
+            "ADJUSTMENT",
+            "PAYMENT",
+            "INTEREST_REBATE",
+        }
+    ),
+    "CORPORATE_ACTION": frozenset(
+        {
+            "CASH_IN_LIEU",
+            "REDEMPTION",
+            "MISC_ADJUSTMENT",
+            "MERGER",
+            "RIGHTS_OFFERING",
+            "IDENTIFIER_CHANGE",
+            "REVERSE_SPLIT",
+            "FORWARD_SPLIT",
+            "SPIN_OFF",
+            "CONVERSION",
+            "LIQUIDATION",
+        }
+    ),
+    "OPTION_EA": frozenset(
+        {"CONTRACT_CLOSE", "OPTION_ASSIGNMENT", "OPTION_EXPIRATION", "OPTION_EXERCISE"}
+    ),
+    "JOURNAL": frozenset({"CASH_JOURNAL"}),
+    "EC_SETTLEMENT": frozenset({"EC_EXPIRATION", "EC_PAYOUT"}),
+    "OTHER": frozenset({"INCOME", "LENDING_REBATE", "DVP", "GRID_TRANSFER", "OTHER"}),
+}
+_REVERSAL_SUBTYPES = frozenset(
+    {
+        "REVERSAL",
+        "ACH_REVERSE",
+        "REVERSAL_FEE",
+        "ACH_REVERSE_FEE",
+        "BUY_CANCELLED",
+        "SELL_CANCELLED",
+    }
+)
 _EVENT_FIELDS = frozenset(
-    {"activity_id", "activity_type", "amount", "currency", "event_time"}
+    {
+        "id",
+        "account_id",
+        "activity_type",
+        "activity_sub_type",
+        "currency",
+        "market",
+        "symbol",
+        "trade_date",
+        "net_amount",
+        "biz_time",
+    }
+)
+_REQUIRED_EVENT_FIELDS = frozenset(
+    {
+        "id",
+        "account_id",
+        "activity_type",
+        "activity_sub_type",
+        "currency",
+        "trade_date",
+        "net_amount",
+        "biz_time",
+    }
 )
 
 
@@ -49,10 +164,6 @@ class ConflictingActivity(CashActivitiesError):
     """One event ID was returned with conflicting event content."""
 
 
-class UnverifiedRecordSchema(CashActivitiesError):
-    """A nonempty page was returned but the record schema is not verified."""
-
-
 @dataclass(frozen=True)
 class PaginationProvenance:
     page_number: int
@@ -65,9 +176,15 @@ class PaginationProvenance:
 class CashActivityEvidence:
     event_id: str = field(repr=False)
     raw_category: str
+    raw_subcategory: str
     amount: Decimal
     currency: str
-    broker_event_time: datetime | None
+    trade_date: date
+    biz_time_raw: str
+    market: str | None
+    symbol: str | None
+    account_match_verified: bool
+    reversal_ambiguous: bool
     observed_at: datetime
     pagination_provenance: tuple[PaginationProvenance, ...]
     classification: None = None
@@ -78,7 +195,7 @@ class CashActivityEvidence:
         {
             "ACTIVITY_CLASSIFICATION_UNVERIFIED",
             "EXTERNAL_FLOW_SIGN_UNVERIFIED",
-            "BROKER_EVENT_TIME_SEMANTICS_UNVERIFIED",
+            "BIZ_TIME_FORMAT_TIMEZONE_UNVERIFIED",
             "BROKER_ORDERING_UNVERIFIED",
             "ACCOUNT_BINDING_UNVERIFIED",
         }
@@ -108,9 +225,8 @@ class CashActivityHistory:
             "EXTERNAL_FLOW_CLASSIFICATION_UNVERIFIED",
             "EXTERNAL_FLOW_SIGN_UNVERIFIED",
             "HISTORY_COVERAGE_UNVERIFIED",
-            "RECORD_SCHEMA_UNVERIFIED",
             "EMPTY_RESULT_NOT_PROOF_OF_NO_FLOWS",
-            "BROKER_EVENT_TIME_SEMANTICS_UNVERIFIED",
+            "BIZ_TIME_FORMAT_TIMEZONE_UNVERIFIED",
             "BROKER_ORDERING_UNVERIFIED",
             "RECONCILIATION_NOT_PERFORMED",
         }
@@ -165,15 +281,12 @@ def _cursor_digest(cursor: str | None) -> str | None:
 
 
 def _parse_amount(value: object) -> Decimal:
-    if isinstance(value, bool) or not isinstance(value, (str, int)):
-        raise MalformedResponse(
-            "cash activity amount must be a decimal string or integer"
-        )
-    text = str(value)
-    if not _DECIMAL_PATTERN.fullmatch(text):
-        raise MalformedResponse("cash activity amount is not a plain decimal")
+    if not isinstance(value, str):
+        raise MalformedResponse("cash activity net_amount must be a decimal string")
+    if not _DECIMAL_PATTERN.fullmatch(value):
+        raise MalformedResponse("cash activity net_amount is not a plain decimal")
     try:
-        result = Decimal(text)
+        result = Decimal(value)
     except InvalidOperation:
         raise MalformedResponse("cash activity amount is not a valid decimal") from None
     if not result.is_finite():
@@ -181,63 +294,125 @@ def _parse_amount(value: object) -> Decimal:
     return result
 
 
-def _parse_event_time(value: object) -> datetime | None:
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip() or value != value.strip():
-        raise MalformedResponse("cash activity event_time must be an ISO-8601 string")
+def _parse_trade_date(value: object) -> date:
+    if not isinstance(value, str) or not _TRADE_DATE_PATTERN.fullmatch(value):
+        raise MalformedResponse("cash activity trade_date must use yyyy-MM-dd")
     try:
-        parsed = datetime.fromisoformat(value)
+        return date.fromisoformat(value)
     except ValueError:
-        raise MalformedResponse("cash activity event_time is malformed") from None
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise MalformedResponse("cash activity event_time must include a timezone")
-    return parsed
+        raise MalformedResponse("cash activity trade_date is malformed") from None
+
+
+def _validate_query_window(
+    start_time: str | None, end_time: str | None
+) -> tuple[str | None, str | None]:
+    if (start_time is None) != (end_time is None):
+        raise ValueError("start_time and end_time must be provided together")
+    if start_time is None:
+        return None, None
+
+    parsed: list[datetime] = []
+    for name, value in (("start_time", start_time), ("end_time", end_time)):
+        if not isinstance(value, str) or not _QUERY_TIME_PATTERN.fullmatch(value):
+            raise ValueError(f"{name} must use UTC format yyyy-MM-ddTHH:mm:ss.SSSZ")
+        try:
+            parsed.append(
+                datetime.strptime(value[:-1] + "+0000", "%Y-%m-%dT%H:%M:%S.%f%z")
+            )
+        except ValueError:
+            raise ValueError(f"{name} is not a valid UTC timestamp") from None
+    if parsed[0].year != parsed[1].year:
+        raise ValueError("cash activity query windows must remain within one year")
+    if parsed[0] > parsed[1]:
+        raise ValueError("start_time must not be after end_time")
+    return start_time, end_time
 
 
 def _parse_event(
     value: object,
     *,
+    selected_account_id: str,
     observed_at: datetime,
     provenance: PaginationProvenance,
 ) -> CashActivityEvidence:
     if not isinstance(value, Mapping):
         raise MalformedResponse("cash activity entry must be an object")
     unknown_fields = set(value) - _EVENT_FIELDS
-    required_fields = {"activity_id", "activity_type", "amount", "currency"}
-    if unknown_fields or not required_fields.issubset(value):
+    if unknown_fields or not _REQUIRED_EVENT_FIELDS.issubset(value):
         raise MalformedResponse(
             "cash activity entry has an unsupported field structure"
         )
 
-    event_id = value["activity_id"]
+    event_id = value["id"]
+    account_id = value["account_id"]
     category = value["activity_type"]
+    subcategory = value["activity_sub_type"]
     currency = value["currency"]
     if (
         not isinstance(event_id, str)
         or not event_id.strip()
         or event_id != event_id.strip()
     ):
-        raise MalformedResponse("cash activity activity_id must be a non-empty string")
+        raise MalformedResponse("cash activity id must be a non-empty string")
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise MalformedResponse("cash activity account_id must be a non-empty string")
+    if account_id != selected_account_id:
+        raise MalformedResponse(
+            "cash activity account_id does not match the selected account"
+        )
     if not isinstance(category, str) or not category.strip():
         raise MalformedResponse(
             "cash activity activity_type must be a non-empty string"
         )
+    if not isinstance(subcategory, str) or not subcategory.strip():
+        raise MalformedResponse(
+            "cash activity activity_sub_type must be a non-empty string"
+        )
     if (
-        not isinstance(currency, str)
-        or len(currency) != 3
-        or not currency.isascii()
-        or not currency.isalpha()
+        category not in _ACTIVITY_SUBTYPES
+        or subcategory not in _ACTIVITY_SUBTYPES[category]
     ):
-        raise MalformedResponse("cash activity currency must be a three-letter code")
+        raise MalformedResponse("cash activity type/subtype is not documented")
+    if not isinstance(currency, str) or currency != "USD":
+        raise MalformedResponse("cash activity currency is not a documented value")
+
+    market = value.get("market")
+    if "market" in value and (not isinstance(market, str) or market != "US"):
+        raise MalformedResponse("cash activity market is not a documented value")
+    symbol = value.get("symbol")
+    if "symbol" in value and (
+        not isinstance(symbol, str) or not symbol or symbol != symbol.strip()
+    ):
+        raise MalformedResponse("cash activity symbol is malformed")
+    biz_time = value["biz_time"]
+    if not isinstance(biz_time, str) or not biz_time.strip():
+        raise MalformedResponse("cash activity biz_time must be a non-empty string")
+
+    reversal_ambiguous = subcategory in _REVERSAL_SUBTYPES
+    trust_flags = {
+        "ACTIVITY_CLASSIFICATION_UNVERIFIED",
+        "EXTERNAL_FLOW_SIGN_UNVERIFIED",
+        "BIZ_TIME_FORMAT_TIMEZONE_UNVERIFIED",
+        "BROKER_ORDERING_UNVERIFIED",
+        "ACCOUNT_BINDING_UNVERIFIED",
+    }
+    if reversal_ambiguous:
+        trust_flags.add("REVERSAL_LINKAGE_UNVERIFIED")
     return CashActivityEvidence(
         event_id=event_id,
         raw_category=category,
-        amount=_parse_amount(value["amount"]),
-        currency=currency.upper(),
-        broker_event_time=_parse_event_time(value.get("event_time")),
+        raw_subcategory=subcategory,
+        amount=_parse_amount(value["net_amount"]),
+        currency=currency,
+        trade_date=_parse_trade_date(value["trade_date"]),
+        biz_time_raw=biz_time,
+        market=market,
+        symbol=symbol,
+        account_match_verified=True,
+        reversal_ambiguous=reversal_ambiguous,
         observed_at=observed_at,
         pagination_provenance=(provenance,),
+        trust_flags=frozenset(trust_flags),
     )
 
 
@@ -292,7 +467,7 @@ def _parse_page(body: object) -> tuple[list[object], str | None]:
         raise MalformedResponse("cash activities data must be an array")
 
     cursor = body.get("pagination_key")
-    if cursor is not None and (
+    if "pagination_key" in body and (
         not isinstance(cursor, str) or not cursor.strip() or cursor != cursor.strip()
     ):
         raise MalformedResponse("cash activities pagination_key is malformed")
@@ -302,9 +477,13 @@ def _parse_page(body: object) -> tuple[list[object], str | None]:
 def _same_event(left: CashActivityEvidence, right: CashActivityEvidence) -> bool:
     return (
         left.raw_category == right.raw_category
+        and left.raw_subcategory == right.raw_subcategory
         and left.amount == right.amount
         and left.currency == right.currency
-        and left.broker_event_time == right.broker_event_time
+        and left.trade_date == right.trade_date
+        and left.biz_time_raw == right.biz_time_raw
+        and left.market == right.market
+        and left.symbol == right.symbol
     )
 
 
@@ -318,18 +497,10 @@ class WebullSandboxCashActivitiesAdapter:
         end_time: str | None = None,
         max_pages: int = 1000,
         clock: Callable[[], datetime] | None = None,
-        allow_provisional_record_schema: bool = False,
     ) -> None:
         if not isinstance(selected_account_id, str) or not selected_account_id.strip():
             raise ValueError("selected_account_id must be a non-empty string")
-        if start_time is not None and (
-            not isinstance(start_time, str) or not start_time.strip()
-        ):
-            raise ValueError("start_time must be a non-empty string when provided")
-        if end_time is not None and (
-            not isinstance(end_time, str) or not end_time.strip()
-        ):
-            raise ValueError("end_time must be a non-empty string when provided")
+        start_time, end_time = _validate_query_window(start_time, end_time)
         if (
             isinstance(max_pages, bool)
             or not isinstance(max_pages, int)
@@ -341,7 +512,6 @@ class WebullSandboxCashActivitiesAdapter:
         self._start_time = start_time.strip() if start_time is not None else None
         self._end_time = end_time.strip() if end_time is not None else None
         self._max_pages = max_pages
-        self._allow_provisional = allow_provisional_record_schema
         self._clock = clock or (lambda: datetime.now(UTC))
 
     def fetch_history(self) -> CashActivityHistory:
@@ -399,12 +569,6 @@ class WebullSandboxCashActivitiesAdapter:
                 event_count=len(entries),
             )
 
-            if entries and not self._allow_provisional:
-                raise UnverifiedRecordSchema(
-                    "cash activities returned records but their schema is unverified; "
-                    "records rejected (schema discovery pending)"
-                )
-
             for index, entry in enumerate(entries, start=1):
                 event_provenance = PaginationProvenance(
                     page_number=page_number,
@@ -414,6 +578,7 @@ class WebullSandboxCashActivitiesAdapter:
                 )
                 parsed = _parse_event(
                     entry,
+                    selected_account_id=self._account_id,
                     observed_at=observed_at,
                     provenance=event_provenance,
                 )
@@ -428,14 +593,21 @@ class WebullSandboxCashActivitiesAdapter:
                     events[parsed.event_id] = CashActivityEvidence(
                         event_id=previous.event_id,
                         raw_category=previous.raw_category,
+                        raw_subcategory=previous.raw_subcategory,
                         amount=previous.amount,
                         currency=previous.currency,
-                        broker_event_time=previous.broker_event_time,
+                        trade_date=previous.trade_date,
+                        biz_time_raw=previous.biz_time_raw,
+                        market=previous.market,
+                        symbol=previous.symbol,
+                        account_match_verified=previous.account_match_verified,
+                        reversal_ambiguous=previous.reversal_ambiguous,
                         observed_at=previous.observed_at,
                         pagination_provenance=(
                             *previous.pagination_provenance,
                             *parsed.pagination_provenance,
                         ),
+                        trust_flags=previous.trust_flags,
                     )
 
             pages.append(page)
@@ -464,7 +636,6 @@ __all__ = [
     "OfficialSdkCashActivitiesGateway",
     "PaginationProvenance",
     "RepeatedCursor",
-    "UnverifiedRecordSchema",
     "WebullSandboxCashActivitiesAdapter",
     "build_official_sandbox_cash_activities_gateway",
 ]
