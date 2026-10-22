@@ -1,5 +1,13 @@
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import (
+    ROUND_CEILING,
+    ROUND_DOWN,
+    ROUND_FLOOR,
+    ROUND_HALF_EVEN,
+    ROUND_UP,
+    Decimal,
+    localcontext,
+)
 from uuid import uuid4
 
 import pytest
@@ -183,6 +191,34 @@ def test_plan_prices_follow_trade_direction(side, stop, target):
 def test_plan_quantity_must_fit_stop_risk_budget():
     with pytest.raises(ValidationError, match="stop-risk budget"):
         make_plan(quantity=Decimal(51))
+
+
+@pytest.mark.parametrize("precision", (2, 6, 28, 50))
+@pytest.mark.parametrize(
+    "rounding",
+    (ROUND_HALF_EVEN, ROUND_DOWN, ROUND_UP, ROUND_FLOOR, ROUND_CEILING),
+)
+def test_trade_plan_stop_risk_is_exact_under_decimal_context(precision, rounding):
+    with localcontext() as context:
+        context.prec = precision
+        context.rounding = rounding
+        valid = make_plan(
+            entry=Decimal("10.123"),
+            stop=Decimal(10),
+            target=Decimal(11),
+            quantity=Decimal(100),
+            risk_intent=RiskIntent(stop_risk_budget=Decimal("12.300")),
+        )
+        assert valid.quantity == Decimal(100)
+
+        with pytest.raises(ValidationError, match="stop-risk budget"):
+            make_plan(
+                entry=Decimal("10.123"),
+                stop=Decimal(10),
+                target=Decimal(11),
+                quantity=Decimal(100),
+                risk_intent=RiskIntent(stop_risk_budget=Decimal("12.2999")),
+            )
 
 
 def test_trade_plan_is_immutable_and_amendments_are_versioned():
@@ -423,3 +459,56 @@ def test_journal_rejects_fills_that_exceed_the_order_quantity():
             fills=fills,
             created_at=fills[-1].filled_at,
         )
+
+
+@pytest.mark.parametrize("precision", (2, 6, 28, 50))
+@pytest.mark.parametrize(
+    "rounding",
+    (ROUND_HALF_EVEN, ROUND_DOWN, ROUND_UP, ROUND_FLOOR, ROUND_CEILING),
+)
+def test_journal_fill_aggregation_is_exact_under_decimal_context(precision, rounding):
+    with localcontext() as context:
+        context.prec = precision
+        context.rounding = rounding
+        plan = make_plan()
+        order = OrderIntent(
+            plan_id=plan.id,
+            action=OrderAction.BUY,
+            order_type=OrderType.LIMIT,
+            quantity=Decimal("0.5785"),
+            limit_price=Decimal(100),
+            created_at=plan.planned_at + timedelta(minutes=1),
+        )
+        fills = tuple(
+            Fill(
+                order_intent_id=order.id,
+                filled_at=order.created_at + timedelta(seconds=seconds),
+                quantity=Decimal(quantity),
+                price=Decimal(100),
+            )
+            for seconds, quantity in ((1, "0.1234"), (2, "0.4551"))
+        )
+        valid = JournalEntry(
+            plan=plan,
+            orders=(order,),
+            fills=fills,
+            created_at=fills[-1].filled_at,
+        )
+        assert valid.fills == fills
+
+        excessive_fills = (
+            fills[0],
+            Fill(
+                order_intent_id=order.id,
+                filled_at=order.created_at + timedelta(seconds=3),
+                quantity=Decimal("0.4552"),
+                price=Decimal(100),
+            ),
+        )
+        with pytest.raises(ValidationError, match="cannot exceed the order quantity"):
+            JournalEntry(
+                plan=plan,
+                orders=(order,),
+                fills=excessive_fills,
+                created_at=excessive_fills[-1].filled_at,
+            )

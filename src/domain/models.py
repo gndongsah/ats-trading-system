@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import Enum, IntEnum
+from fractions import Fraction
 from itertools import pairwise
 from uuid import UUID, uuid4
 
@@ -261,6 +262,7 @@ class RiskIntent(ImmutableModel):
 class TradePlan(ImmutableModel):
     id: UUID = Field(default_factory=uuid4)
     trade_id: UUID = Field(default_factory=uuid4)
+    account_id: UUID | None = None
     version: int = Field(default=1, ge=1)
     supersedes_plan_id: UUID | None = None
     security: SecurityRef
@@ -299,8 +301,10 @@ class TradePlan(ImmutableModel):
         elif not self.target < self.entry < self.stop:
             raise ValueError("short plan requires target < entry < stop")
 
-        stop_risk = abs(self.entry - self.stop) * self.quantity
-        if stop_risk > self.risk_intent.stop_risk_budget:
+        stop_risk = abs(Fraction(self.entry) - Fraction(self.stop)) * Fraction(
+            self.quantity
+        )
+        if stop_risk > Fraction(self.risk_intent.stop_risk_budget):
             raise ValueError("trade quantity exceeds the declared stop-risk budget")
         return self
 
@@ -436,18 +440,18 @@ class JournalEntry(ImmutableModel):
         for order in self.orders:
             if order.created_at < self.plan.planned_at:
                 raise ValueError("journal orders cannot predate the plan")
-        fill_totals: dict[UUID, Decimal] = {}
+        fill_totals: dict[UUID, Fraction] = {}
         for fill in self.fills:
             order = orders_by_id.get(fill.order_intent_id)
             if order is None:
                 raise ValueError("journal fills must reference a journal order")
             if fill.filled_at < order.created_at:
                 raise ValueError("journal fills cannot predate their order")
-            fill_totals[order.id] = (
-                fill_totals.get(order.id, Decimal(0)) + fill.quantity
+            fill_totals[order.id] = fill_totals.get(order.id, Fraction(0)) + Fraction(
+                fill.quantity
             )
         if any(
-            filled_quantity > orders_by_id[order_id].quantity
+            filled_quantity > Fraction(orders_by_id[order_id].quantity)
             for order_id, filled_quantity in fill_totals.items()
         ):
             raise ValueError("filled quantity cannot exceed the order quantity")

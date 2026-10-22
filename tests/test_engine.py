@@ -50,3 +50,11 @@ def test_weighted_scoring_rejects_scores_outside_configured_range():
 
     with pytest.raises(ValueError, match="must be between"):
         score_market_opportunity(invalid_scores)
+
+
+def test_weighted_scoring_rejects_boolean_factor_values():
+    section = PLAYBOOK.market_opportunity
+    invalid_scores = {factor: True for factor in section.factors}
+
+    with pytest.raises(TypeError, match="numeric, not boolean"):
+        score_market_opportunity(invalid_scores)

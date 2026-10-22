@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -8,7 +9,9 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
+    Numeric,
     String,
     UniqueConstraint,
 )
@@ -176,3 +179,263 @@ class EvidenceItemRecord(Base):
         Uuid(as_uuid=True), nullable=False
     )
     evidence_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
+
+
+class PortfolioSnapshotRecord(Base):
+    __tablename__ = "ats_portfolio_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id", "version", name="uq_ats_portfolio_snapshot_account_version"
+        ),
+        CheckConstraint("version >= 1", name="ck_ats_portfolio_snapshot_version"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    account_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    snapshot_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
+
+
+class RiskReservationEventRecord(Base):
+    __tablename__ = "ats_risk_reservation_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "reservation_id", "sequence", name="uq_ats_risk_reservation_sequence"
+        ),
+        UniqueConstraint(
+            "account_id",
+            "idempotency_key",
+            name="uq_ats_risk_reservation_idempotency",
+        ),
+        Index(
+            "ix_ats_risk_reservation_account",
+            "account_id",
+            "reservation_id",
+            "sequence",
+        ),
+        CheckConstraint("sequence >= 1", name="ck_ats_risk_reservation_sequence"),
+        CheckConstraint(
+            "event_type IN ('reserved', 'fill', 'stop_confirmed', 'release')",
+            name="ck_ats_risk_reservation_event_type",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    account_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    reservation_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    plan_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("ats_trade_plans.id"), nullable=False
+    )
+    event_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
+class LossValuationObservationRecord(Base):
+    __tablename__ = "ats_loss_valuation_observations"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "source_id",
+            "source_epoch",
+            "source_sequence",
+            name="uq_ats_loss_valuation_source_sequence",
+        ),
+        CheckConstraint("source_sequence > 0", name="ck_ats_loss_valuation_sequence"),
+        Index(
+            "ix_ats_loss_valuation_account_as_of",
+            "account_id",
+            "as_of",
+            "source_sequence",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    account_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_epoch: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    base_currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    net_liquidation: Mapped[Decimal] = mapped_column(Numeric(), nullable=False)
+    complete: Mapped[bool] = mapped_column(nullable=False)
+    reconciled: Mapped[bool] = mapped_column(nullable=False)
+    provenance_ref: Mapped[str] = mapped_column(String(256), nullable=False)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    correction_of_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ats_loss_valuation_observations.id"),
+        nullable=True,
+    )
+
+
+class LossExternalFlowRecord(Base):
+    __tablename__ = "ats_loss_external_flows"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "source_id",
+            "source_epoch",
+            "source_sequence",
+            name="uq_ats_loss_flow_source_sequence",
+        ),
+        UniqueConstraint(
+            "account_id",
+            "source_id",
+            "source_epoch",
+            "flow_id",
+            name="uq_ats_loss_flow_identity",
+        ),
+        CheckConstraint("source_sequence > 0", name="ck_ats_loss_flow_sequence"),
+        CheckConstraint(
+            "flow_kind IN ('CONTRIBUTION', 'WITHDRAWAL')",
+            name="ck_ats_loss_flow_kind",
+        ),
+        CheckConstraint(
+            "(flow_kind = 'CONTRIBUTION' AND signed_amount > 0) OR "
+            "(flow_kind = 'WITHDRAWAL' AND signed_amount < 0)",
+            name="ck_ats_loss_flow_sign",
+        ),
+        Index(
+            "ix_ats_loss_flow_account_time",
+            "account_id",
+            "occurred_at",
+            "source_sequence",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    account_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    flow_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_epoch: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    flow_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    signed_amount: Mapped[Decimal] = mapped_column(Numeric(), nullable=False)
+    base_currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    provenance_ref: Mapped[str] = mapped_column(String(256), nullable=False)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    correction_of_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ats_loss_external_flows.id"),
+        nullable=True,
+    )
+
+
+class LossPeriodOpeningRecord(Base):
+    __tablename__ = "ats_loss_period_openings"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "period_kind",
+            "period_id",
+            name="uq_ats_loss_opening_period",
+        ),
+        CheckConstraint(
+            "period_kind IN ('DAILY', 'WEEKLY')", name="ck_ats_loss_opening_kind"
+        ),
+        CheckConstraint("immutable_version >= 1", name="ck_ats_loss_opening_version"),
+        CheckConstraint("source_sequence > 0", name="ck_ats_loss_opening_sequence"),
+        CheckConstraint("opening_equity > 0", name="ck_ats_loss_opening_equity"),
+        Index(
+            "ix_ats_loss_opening_account_period",
+            "account_id",
+            "period_kind",
+            "period_id",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    account_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    period_kind: Mapped[str] = mapped_column(String(8), nullable=False)
+    period_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    calendar_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    opening_equity: Mapped[Decimal] = mapped_column(Numeric(), nullable=False)
+    opening_nlv: Mapped[Decimal] = mapped_column(Numeric(), nullable=False)
+    base_currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_epoch: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    immutable_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    complete: Mapped[bool] = mapped_column(nullable=False)
+    reconciled: Mapped[bool] = mapped_column(nullable=False)
+    provenance_ref: Mapped[str] = mapped_column(String(256), nullable=False)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class LossStateEventRecord(Base):
+    __tablename__ = "ats_loss_state_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "state_version",
+            name="uq_ats_loss_state_account_version",
+        ),
+        UniqueConstraint(
+            "account_id",
+            "event_key",
+            name="uq_ats_loss_state_event_key",
+        ),
+        CheckConstraint("state_version >= 1", name="ck_ats_loss_state_version"),
+        CheckConstraint(
+            "event_type IN ('OBSERVED', 'LOCKED', 'CORRECTION')",
+            name="ck_ats_loss_state_event_type",
+        ),
+        Index(
+            "ix_ats_loss_state_account_version",
+            "account_id",
+            "state_version",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    account_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    event_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    daily_period_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    weekly_period_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    daily_locked: Mapped[bool] = mapped_column(nullable=False)
+    weekly_locked: Mapped[bool] = mapped_column(nullable=False)
+    valuation_observation_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ats_loss_valuation_observations.id"),
+        nullable=False,
+    )
+    daily_opening_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ats_loss_period_openings.id"),
+        nullable=False,
+    )
+    weekly_opening_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ats_loss_period_openings.id"),
+        nullable=False,
+    )
+    daily_pnl_numerator: Mapped[str] = mapped_column(String(4096), nullable=False)
+    daily_pnl_denominator: Mapped[str] = mapped_column(String(4096), nullable=False)
+    weekly_pnl_numerator: Mapped[str] = mapped_column(String(4096), nullable=False)
+    weekly_pnl_denominator: Mapped[str] = mapped_column(String(4096), nullable=False)
+    daily_r_numerator: Mapped[str] = mapped_column(String(4096), nullable=False)
+    daily_r_denominator: Mapped[str] = mapped_column(String(4096), nullable=False)
+    weekly_r_numerator: Mapped[str] = mapped_column(String(4096), nullable=False)
+    weekly_r_denominator: Mapped[str] = mapped_column(String(4096), nullable=False)
+    flow_evidence: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
+    input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    correction_of_state_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
