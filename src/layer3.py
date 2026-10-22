@@ -32,6 +32,7 @@ from src.persistence.models import (
     RiskReservationEventRecord,
     TradePlanRecord,
 )
+from src.persistence.transaction_retry import run_in_transaction
 from src.portfolio import (
     CandidateExposure,
     FilledExposure,
@@ -332,6 +333,7 @@ class Layer3Decision(BaseModel):
     reason: str
     reservation_id: UUID | None = None
     execution_enabled: bool = False
+    replayed: bool = False
 
 
 class ExecutionDisabledError(RuntimeError):
@@ -396,6 +398,28 @@ class Layer3AuthorizationService:
         )
         session.flush()
 
+    def authorize_with_retry(
+        self,
+        session_factory: Callable[[], Session],
+        *,
+        plan_id: UUID,
+        idempotency_key: str,
+        max_attempts: int = 3,
+    ) -> Layer3Decision:
+        """Database-only, non-enforcing boundary; returns only after commit.
+
+        Providers must be local evidence adapters; broker I/O is forbidden in
+        this scope. Retry the entire transaction with the original identity.
+        No API route or order submission is enabled by this method.
+        """
+        return run_in_transaction(
+            session_factory,
+            lambda session: self.authorize(
+                session, plan_id=plan_id, idempotency_key=idempotency_key
+            ),
+            max_attempts=max_attempts,
+        )
+
     def authorize(
         self,
         session: Session,
@@ -455,7 +479,9 @@ class Layer3AuthorizationService:
                 session, account_id, now, prior.event_data
             ):
                 return self._deny(Layer3Reason.LOSS_STATE_VERSION_CONFLICT)
-            return Layer3Decision.model_validate(prior.event_data["decision"])
+            return Layer3Decision.model_validate(
+                prior.event_data["decision"]
+            ).model_copy(update={"replayed": True, "execution_enabled": False})
 
         prior_plan_reservation = session.scalar(
             select(RiskReservationEventRecord.id)

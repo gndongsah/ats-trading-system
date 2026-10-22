@@ -120,7 +120,9 @@ def test_reservation_binds_loss_state_and_stale_replay_is_denied(tmp_path):
                 "version": 1,
                 "policy_version": "ats-009-test-v1",
             }
-        assert authorize(factory, service, account_id, plan_id, "k1") == first
+        assert authorize(
+            factory, service, account_id, plan_id, "k1"
+        ) == first.model_copy(update={"replayed": True})
 
         provider.version = 2
         stale = authorize(factory, service, account_id, plan_id, "k1")
