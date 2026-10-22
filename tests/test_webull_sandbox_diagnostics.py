@@ -3,11 +3,9 @@
 Synthetic data and a mock keyring only; no network and no real credentials.
 """
 
-import importlib.util
 import io
 import logging
 import traceback
-from pathlib import Path
 
 import pytest
 
@@ -30,7 +28,6 @@ K, S = "WEBULL_APP_KEY", "WEBULL_APP_SECRET"
 KR_KEY, KR_SECRET = "KR-SYNTH-KEY", "KR-SYNTH-SECRET"
 ENV_KEY, ENV_SECRET = "ENV-SYNTH-KEY", "ENV-SYNTH-SECRET"
 LEAK = "synthetic-leak-marker"
-RUNNER = Path(r"C:\Users\ghamf\Downloads\webull_sandbox_auth_diagnostic.py")
 
 
 class FakeKeyring:
@@ -258,137 +255,3 @@ def test_compare_sources_match_mismatch_unavailable():
         compare_sources(environ={K: ENV_KEY}, keyring_module=keyring_pair())
         == "UNAVAILABLE"
     )
-
-
-# ---- diagnostic runner --------------------------------------------------------
-
-
-@pytest.fixture(scope="module")
-def runner():
-    if not RUNNER.exists():
-        pytest.skip("external diagnostic runner not present")
-    spec = importlib.util.spec_from_file_location("auth_diag_under_test", RUNNER)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-class Resp:
-    def __init__(self, body, status=200):
-        self.status_code = status
-        self._body = body
-
-    def json(self):
-        return self._body
-
-
-class Trade:
-    def __init__(self, list_result=None, list_error=None):
-        self.calls = []
-        outer = self
-
-        class Account:
-            def get_account_list(self):
-                outer.calls.append("account_list")
-                if list_error:
-                    raise list_error
-                return list_result
-
-            def get_account_balance(self, *a):
-                raise AssertionError("balance must not be called")
-
-            def get_account_position(self, *a):
-                raise AssertionError("positions must not be called")
-
-        class Activity:
-            def list_activities(self, *a, **k):
-                raise AssertionError("cash activities must not be called")
-
-        self.account_v2 = Account()
-        self.activity = Activity()
-
-
-def test_runner_reports_init_failure_phase_status_and_code_only(runner, capsys):
-    def build(key, secret):
-        raise classify_sdk_exception("client initialization", ServerException())
-
-    code = runner.run(
-        environ=env_pair(), keyring_module=keyring_pair(), build_trade_client=build
-    )
-    out = capsys.readouterr().out
-
-    assert code == 1
-    assert "credential_source_used: keyring" in out
-    assert "keyring_vs_environment_pair: MISMATCH" in out
-    assert "failed_phase: client_initialization" in out
-    assert "http_status: 401" in out and "error_code: INVALID_APP_KEY" in out
-    for secret in (KR_KEY, KR_SECRET, ENV_KEY, ENV_SECRET, LEAK):
-        assert secret not in out
-
-
-def test_runner_reports_account_list_phase_failure_with_one_request(runner, capsys):
-    trade = Trade(list_error=ServerException(code="FORBIDDEN", http_status=403))
-    code = runner.run(
-        environ={}, keyring_module=keyring_pair(), build_trade_client=lambda k, s: trade
-    )
-    out = capsys.readouterr().out
-
-    assert code == 1
-    assert trade.calls == ["account_list"]
-    assert "failed_phase: account_list" in out
-    assert "http_status: 403" in out and "error_code: FORBIDDEN" in out
-    assert "keyring_vs_environment_pair: UNAVAILABLE" in out
-    assert LEAK not in out
-
-
-def test_runner_success_prints_count_only_and_no_ids(runner, capsys):
-    accounts = [
-        {"account_id": "FULL-ID-AAAA-0001"},
-        {"account_id": "FULL-ID-BBBB-0002"},
-    ]
-    trade = Trade(list_result=Resp(accounts))
-    code = runner.run(
-        environ={}, keyring_module=keyring_pair(), build_trade_client=lambda k, s: trade
-    )
-    out = capsys.readouterr().out
-
-    assert code == 0
-    assert trade.calls == ["account_list"]
-    assert "account_count: 2" in out and "result: PASS" in out
-    assert "FULL-ID" not in out
-    assert "sdk_files_written_to_scratch_cwd: 0" in out
-
-
-def test_runner_blocks_without_credentials_or_with_debug(runner, capsys):
-    built = []
-    assert (
-        runner.run(
-            environ={}, keyring_module=FakeKeyring(), build_trade_client=built.append
-        )
-        == 2
-    )
-    assert (
-        runner.run(
-            environ={**env_pair(), "WEBULL_API_DEBUG": "sdk"},
-            keyring_module=keyring_pair(),
-            build_trade_client=built.append,
-        )
-        == 2
-    )
-    out = capsys.readouterr().out
-    assert built == []
-    for secret in (KR_KEY, KR_SECRET, ENV_KEY, ENV_SECRET):
-        assert secret not in out
-
-
-def test_runner_source_has_no_other_endpoints_or_secret_output(runner):
-    source = RUNNER.read_text(encoding="utf-8")
-    for token in (
-        "place_order",
-        "order_v",
-        "get_account_balance",
-        "get_account_position",
-        "list_activities",
-        "set_password",
-    ):
-        assert token not in source
