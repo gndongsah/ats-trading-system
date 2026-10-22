@@ -1,16 +1,10 @@
 """Offline tests for the minimal cash-activities request (ATS-009C3A). Synthetic only."""
 
-import importlib.util
-from pathlib import Path
-
-import pytest
-
+from src import webull_sandbox_evidence
 from src.webull_sandbox_cash_activities import (
     OfficialSdkCashActivitiesGateway,
     describe_response_shape,
 )
-
-RUNNER = Path(r"C:\Users\ghamf\Downloads\webull_sandbox_cash_activities_diagnostic.py")
 
 
 class _Capture:
@@ -87,16 +81,6 @@ def test_unsafe_field_names_are_masked():
     assert "SECRET" not in repr(shape)
 
 
-@pytest.fixture(scope="module")
-def runner():
-    if not RUNNER.exists():
-        pytest.skip("external diagnostic runner not present")
-    spec = importlib.util.spec_from_file_location("cash_diag_under_test", RUNNER)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 class _Keyring:
     def get_password(self, service, name):
         return {"WEBULL_APP_KEY": "k-synth", "WEBULL_APP_SECRET": "s-synth"}[name]
@@ -129,6 +113,22 @@ class _Trade:
                     ]
                 )
 
+            def get_account_balance(self, account_id):
+                return _Resp(
+                    {
+                        "total_net_liquidation_value": "100.00",
+                        "account_currency_assets": [
+                            {
+                                "currency": "USD",
+                                "net_liquidation_value": "100.00",
+                            }
+                        ],
+                    }
+                )
+
+            def get_account_position(self, account_id):
+                return _Resp([])
+
         class Activity:
             def list_activities(self, account_id, **kwargs):
                 outer.calls.append(kwargs)
@@ -140,9 +140,9 @@ class _Trade:
         self.activity = Activity()
 
 
-def test_runner_one_request_no_optional_params_and_no_values(runner, capsys):
+def test_runner_one_request_no_optional_params_and_no_values(capsys):
     trade = _Trade({"data": [{"activity_id": "TXN-SECRET", "amount": "9.99"}]})
-    code = runner.run(
+    code = webull_sandbox_evidence.run(
         environ={},
         input_fn=lambda _: "1",
         isatty=True,
@@ -156,19 +156,19 @@ def test_runner_one_request_no_optional_params_and_no_values(runner, capsys):
         "end_time": None,
         "pagination_key": None,
     }
-    assert "activity_item_fields" in out and "UNVERIFIED" in out
+    assert "activity_id" in out and "UNVERIFIED" in out
     for leak in ("TXN-SECRET", "9.99", "FULLID"):
         assert leak not in out
 
 
-def test_runner_417_reports_status_and_code_only(runner, capsys):
+def test_runner_417_reports_status_and_code_only(capsys):
     class ServerException(Exception):
         error_code = "OPENAPI_PARAM_ERR"
         http_status = 417
         error_msg = "private-detail"
 
     trade = _Trade(error=ServerException())
-    code = runner.run(
+    code = webull_sandbox_evidence.run(
         environ={},
         input_fn=lambda _: "1",
         isatty=True,
@@ -181,9 +181,9 @@ def test_runner_417_reports_status_and_code_only(runner, capsys):
     assert "private-detail" not in out and "FULLID" not in out
 
 
-def test_runner_cancel_makes_no_cash_request(runner, capsys):
+def test_runner_cancel_makes_no_cash_request(capsys):
     trade = _Trade({"data": []})
-    code = runner.run(
+    code = webull_sandbox_evidence.run(
         environ={},
         input_fn=lambda _: "",
         isatty=True,
