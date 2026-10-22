@@ -35,9 +35,7 @@ class FakeGateway:
         self.responses = list(responses)
         self.calls = []
 
-    def list_cash_activities(
-        self, account_id, *, start_time, end_time, pagination_key
-    ):
+    def list_cash_activities(self, account_id, *, start_time, end_time, pagination_key):
         self.calls.append((account_id, start_time, end_time, pagination_key))
         response = self.responses.pop(0)
         if isinstance(response, Exception):
@@ -108,9 +106,7 @@ def test_cursor_pagination_records_sanitized_provenance_and_forwards_filters():
 
 def test_identical_duplicate_is_deduplicated_with_both_page_provenances():
     same = event()
-    history = adapter(
-        FakeGateway(page([same], "next"), page([same]))
-    ).fetch_history()
+    history = adapter(FakeGateway(page([same], "next"), page([same]))).fetch_history()
 
     assert len(history.events) == 1
     assert [p.page_number for p in history.events[0].pagination_provenance] == [1, 2]
@@ -127,8 +123,10 @@ def test_conflicting_same_id_correction_is_rejected_not_guessed():
 
 
 def test_missing_later_page_fails_without_returning_partial_history():
-    with pytest.raises(IncompleteHistory,     match="SdkRequestFailure"):
-        adapter(FakeGateway(page([event()], "next"), RuntimeError("private details"))).fetch_history()
+    with pytest.raises(IncompleteHistory, match="SdkRequestFailure"):
+        adapter(
+            FakeGateway(page([event()], "next"), RuntimeError("private details"))
+        ).fetch_history()
 
 
 def test_http_failure_after_first_page_is_incomplete_and_sanitized():
@@ -205,13 +203,17 @@ def test_nonempty_records_are_rejected_while_record_schema_is_unverified():
 def test_default_adapter_rejects_nonempty_records():
     with pytest.raises(UnverifiedRecordSchema):
         WebullSandboxCashActivitiesAdapter(
-            FakeGateway(page([event()])), selected_account_id=ACCOUNT, clock=lambda: OBSERVED_AT
+            FakeGateway(page([event()])),
+            selected_account_id=ACCOUNT,
+            clock=lambda: OBSERVED_AT,
         ).fetch_history()
 
 
 def test_failed_subsequent_page_after_empty_page_is_incomplete():
     with pytest.raises(IncompleteHistory):
-        adapter(FakeGateway(page([], "c1"), FakeResponse({"data": []}, status_code=500))).fetch_history()
+        adapter(
+            FakeGateway(page([], "c1"), FakeResponse({"data": []}, status_code=500))
+        ).fetch_history()
 
 
 def test_legacy_provisional_response_shapes_are_no_longer_accepted():
@@ -322,9 +324,9 @@ def test_sdk_gateway_exposes_only_list_activities_and_passes_cursor():
             },
         )
     ]
-    assert {
-        name for name in dir(gateway) if not name.startswith("_")
-    } == {"list_cash_activities"}
+    assert {name for name in dir(gateway) if not name.startswith("_")} == {
+        "list_cash_activities"
+    }
 
 
 def test_initial_transport_and_invalid_json_fail_without_sdk_text():

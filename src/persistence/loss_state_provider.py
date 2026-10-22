@@ -7,7 +7,7 @@ authority and Layer 3 remains disabled for order submission.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import ROUND_FLOOR, Decimal
 from fractions import Fraction
 from uuid import UUID
@@ -91,7 +91,7 @@ class RepositoryLossLockProvider:
             return None
         return LossLockState(
             account_id=account_id,
-            as_of=observation.as_of,
+            as_of=observation.as_of.astimezone(UTC),
             policy_version=event.policy_version,
             session_id=resolved.session_id,
             week_id=resolved.week_id,

@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 RUNNER = Path(r"C:\Users\ghamf\Downloads\webull_sandbox_cash_activities_validation.py")
-pytestmark = pytest.mark.skipif(not RUNNER.exists(), reason="external runner not present")
+pytestmark = pytest.mark.skipif(
+    not RUNNER.exists(), reason="external runner not present"
+)
 
 FULL_ID_A = "SYNTH-FULL-ACCOUNT-AAAA-0001"
 FULL_ID_B = "SYNTH-FULL-ACCOUNT-BBBB-0002"
@@ -63,9 +65,7 @@ class FakeTradeClient:
         class ActivityApi:
             def list_activities(self, account_id, **kwargs):
                 outer.calls.append(("activities", account_id, kwargs["pagination_key"]))
-                return Resp(
-                    (activity_pages or [{"data": []}]).pop(0)
-                )
+                return Resp((activity_pages or [{"data": []}]).pop(0))
 
             def get_activities(self, *a, **k):
                 raise AssertionError("deprecated endpoint must not be called")
@@ -135,7 +135,9 @@ def test_nonempty_records_fail_closed_without_printing_contents(runner, capsys):
 def test_no_window_sends_account_only_request(runner, capsys):
     seen = []
     trade = FakeTradeClient([{"data": []}])
-    trade.activity.list_activities = lambda account_id, **kw: seen.append(kw) or Resp({"data": []})
+    trade.activity.list_activities = lambda account_id, **kw: (
+        seen.append(kw) or Resp({"data": []})
+    )
     env = {k: v for k, v in ENV.items() if "CASH_ACTIVITIES" not in k}
     code, _ = go(runner, trade, env=env, answer="2")
     assert code == 0
@@ -144,7 +146,9 @@ def test_no_window_sends_account_only_request(runner, capsys):
 
 
 @pytest.mark.parametrize("answer", ["", "0", "3", "x", "1.5", "-1", " ", "²"])
-def test_cancel_or_malformed_selection_makes_no_activity_request(runner, capsys, answer):
+def test_cancel_or_malformed_selection_makes_no_activity_request(
+    runner, capsys, answer
+):
     trade = FakeTradeClient()
     code, _ = go(runner, trade, answer=answer)
     out = capsys.readouterr().out
@@ -166,7 +170,9 @@ def test_non_interactive_terminal_blocks_without_activity_request(runner, capsys
 
 
 def test_no_cash_accounts_is_cancelled_cleanly(runner, capsys):
-    trade = FakeTradeClient(accounts=[{"account_id": "X-MARGIN-1", "account_type": "MARGIN"}])
+    trade = FakeTradeClient(
+        accounts=[{"account_id": "X-MARGIN-1", "account_type": "MARGIN"}]
+    )
     code, _ = go(runner, trade)
 
     assert code == 1
@@ -251,7 +257,9 @@ def test_sdk_failure_output_is_sanitized(runner, capsys):
 
 def test_cash_endpoint_http_failure_is_sanitized(runner, capsys):
     trade = FakeTradeClient()
-    trade.activity.list_activities = lambda account_id, **kw: Resp({"secret": FULL_ID_B}, 403)
+    trade.activity.list_activities = lambda account_id, **kw: Resp(
+        {"secret": FULL_ID_B}, 403
+    )
     code, _ = go(runner, trade)
     out = capsys.readouterr().out
 
@@ -264,7 +272,10 @@ def test_keyring_credentials_are_used_and_never_printed(runner, capsys):
     class Store:
         def get_password(self, service, name):
             assert service == "ATS-Webull-Sandbox"
-            return {"WEBULL_APP_KEY": "kr-key-value", "WEBULL_APP_SECRET": "kr-secret-value"}[name]
+            return {
+                "WEBULL_APP_KEY": "kr-key-value",
+                "WEBULL_APP_SECRET": "kr-secret-value",
+            }[name]
 
     built = []
     trade = FakeTradeClient()
@@ -284,6 +295,12 @@ def test_keyring_credentials_are_used_and_never_printed(runner, capsys):
 
 def test_runner_source_has_no_order_env_or_id_output(runner):
     source = RUNNER.read_text(encoding="utf-8")
-    for token in ("place_order", "order_v", "cancel_order", "WEBULL_SANDBOX_ACCOUNT_ID", "os.environ["):
+    for token in (
+        "place_order",
+        "order_v",
+        "cancel_order",
+        "WEBULL_SANDBOX_ACCOUNT_ID",
+        "os.environ[",
+    ):
         assert token not in source
     assert "print(selected.account_id" not in source

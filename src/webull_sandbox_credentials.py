@@ -101,7 +101,9 @@ def load_sandbox_credentials(
         except Exception:  # noqa: BLE001
             keyring_module = None
 
-    keyring_values = _read_keyring(keyring_module) if keyring_module is not None else None
+    keyring_values = (
+        _read_keyring(keyring_module) if keyring_module is not None else None
+    )
     if keyring_values is not None:
         found = _evaluate(SOURCE_KEYRING, keyring_values)
         if found is not None:
@@ -120,7 +122,8 @@ def load_sandbox_credentials(
     if keyring_values is None:
         detail += " (keyring backend unavailable)"
     raise CredentialError(
-        f"sandbox credentials not configured in {detail}: " + ", ".join(CREDENTIAL_NAMES)
+        f"sandbox credentials not configured in {detail}: "
+        + ", ".join(CREDENTIAL_NAMES)
     )
 
 
@@ -187,6 +190,8 @@ def compare_sources(
         return "UNAVAILABLE"
     same = all(
         hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
-        for left, right in zip(from_keyring.reveal(), from_environment.reveal(), strict=True)
+        for left, right in zip(
+            from_keyring.reveal(), from_environment.reveal(), strict=True
+        )
     )
     return "MATCH" if same else "MISMATCH"

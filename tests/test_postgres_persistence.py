@@ -529,7 +529,10 @@ def test_postgres_concurrent_layer3_reservations_are_account_serialized(
 
     with ThreadPoolExecutor(max_workers=3) as executor:
         retries = tuple(executor.map(lambda _: retry_same_key(), range(3)))
-    assert all(result == reserved_result for result in retries)
+    assert all(
+        result == reserved_result.model_copy(update={"replayed": True})
+        for result in retries
+    )
 
     with factory.begin() as session:
         different_key = service.authorize(
@@ -591,7 +594,9 @@ def test_postgres_concurrent_same_key_authorization_reserves_once(
         results = tuple(executor.map(lambda _: authorize_same_request(), range(3)))
 
     assert results[0].quantity == 40
-    assert all(result == results[0] for result in results)
+    assert len({result.reservation_id for result in results}) == 1
+    assert sum(result.replayed for result in results) == 2
+    assert all(not result.execution_enabled for result in results)
     with factory() as session:
         reservations = session.scalar(
             select(func.count()).select_from(RiskReservationEventRecord)
@@ -1930,7 +1935,7 @@ def test_postgres_layer3_binds_loss_state_version_and_denies_stale_replay(
         )
 
 
-def test_postgres_unlocked_reservation_binds_version_and_new_event_invalidates_replay(
+def _unlocked_loss_authorization_setup(
     migrated_postgres_engine: Engine,
 ):
     factory, _, account_id, entries = _postgres_layer3_setup(migrated_postgres_engine)
@@ -1989,6 +1994,16 @@ def test_postgres_unlocked_reservation_binds_version_and_new_event_invalidates_r
         ats009_policy_version="ATS-009-v0.1",
         clock=lambda: at,
     )
+    return factory, service, account_id, entries, first, stored
+
+
+def test_postgres_unlocked_reservation_binds_version_and_new_event_invalidates_replay(
+    migrated_postgres_engine: Engine,
+):
+    factory, service, account_id, entries, _first, stored = (
+        _unlocked_loss_authorization_setup(migrated_postgres_engine)
+    )
+    repository = LossStateRepository()
     plan_id = entries[0].plan.id
     with factory.begin() as session:
         reserved = service.authorize(session, plan_id=plan_id, idempotency_key="bind-1")
@@ -2000,10 +2015,9 @@ def test_postgres_unlocked_reservation_binds_version_and_new_event_invalidates_r
             "policy_version": "ATS-009-v0.1",
         }
     with factory.begin() as session:
-        assert (
-            service.authorize(session, plan_id=plan_id, idempotency_key="bind-1")
-            == reserved
-        )
+        assert service.authorize(
+            session, plan_id=plan_id, idempotency_key="bind-1"
+        ) == reserved.model_copy(update={"replayed": True})
 
     second = _loss_state_fixture_inputs(
         account_id,
@@ -2474,3 +2488,334 @@ def test_postgres_loss_tables_are_append_only_and_runtime_grants_are_restricted(
                 factory.begin() as session,
             ):
                 session.execute(text(statement))
+
+
+@pytest.mark.parametrize("sqlstate", ["40001", "40P01", "55P03"])
+@pytest.mark.parametrize("exhaust", [False, True])
+def test_f1_boundary_retries_postgres_failure_after_reservation_atomically(
+    migrated_postgres_engine, monkeypatch, sqlstate, exhaust
+):
+    factory, service, account_id, entries, _, _ = _unlocked_loss_authorization_setup(
+        migrated_postgres_engine
+    )
+    original = service._append_event
+    transactions = []
+    observed_keys = []
+    reads = []
+    provider = service._loss_locks
+    original_read = provider.evaluate_in_transaction
+
+    def read(session, requested_account, at):
+        assert requested_account == account_id
+        reads.append((session, session.scalar(text("SELECT txid_current()"))))
+        return original_read(session, requested_account, at)
+
+    monkeypatch.setattr(provider, "evaluate_in_transaction", read)
+
+    def append(session, **kwargs):
+        original(session, **kwargs)
+        xid = session.scalar(text("SELECT txid_current()"))
+        transactions.append(xid)
+        observed_keys.append(kwargs["idempotency_key"])
+        assert len(reads) >= 2
+        assert reads[-1] == reads[-2] == (session, xid)
+        assert (
+            session.scalar(select(func.count()).select_from(RiskReservationEventRecord))
+            == 1
+        )
+        with factory() as observer:
+            assert (
+                observer.scalar(
+                    select(func.count()).select_from(RiskReservationEventRecord)
+                )
+                == 0
+            )
+        if exhaust or len(transactions) == 1:
+            # Server-raised SQLSTATE after real writes, not a mocked DBAPIError.
+            session.execute(
+                text(
+                    f"DO $$ BEGIN RAISE EXCEPTION 'F1 fault' USING ERRCODE = '{sqlstate}'; END $$"
+                )
+            )
+
+    monkeypatch.setattr(service, "_append_event", append)
+    kwargs = {
+        "plan_id": entries[0].plan.id,
+        "idempotency_key": "f1-original-key",
+        "max_attempts": 2,
+    }
+    if exhaust:
+        with pytest.raises(TransactionRetryExhausted) as info:
+            service.authorize_with_retry(factory, **kwargs)
+        assert info.value.sqlstate == sqlstate
+        assert info.value.attempts == 2
+    else:
+        result = service.authorize_with_retry(factory, **kwargs)
+        assert result.quantity == 40
+        assert not result.execution_enabled and not result.replayed
+        replay = service.authorize_with_retry(factory, **kwargs)
+        assert replay.replayed and not replay.execution_enabled
+        assert replay.reservation_id == result.reservation_id
+    assert len(set(transactions)) == 2
+    assert observed_keys == ["reserve:f1-original-key"] * 2
+    with factory() as session:
+        assert session.scalar(
+            select(func.count()).select_from(RiskReservationEventRecord)
+        ) == (0 if exhaust else 1)
+        assert (
+            session.scalar(select(func.count()).select_from(LossStateEventRecord)) == 1
+        )
+
+
+@pytest.mark.parametrize("database_failure", [False, True])
+def test_f1_boundary_does_not_retry_application_or_integrity_failure(
+    migrated_postgres_engine, monkeypatch, database_failure
+):
+    factory, service, _, entries, _, _ = _unlocked_loss_authorization_setup(
+        migrated_postgres_engine
+    )
+    original = service._append_event
+    calls = []
+
+    def append(session, **kwargs):
+        original(session, **kwargs)
+        calls.append(1)
+        if database_failure:
+            session.execute(
+                text(
+                    "DO $$ BEGIN RAISE EXCEPTION 'F1 integrity' USING ERRCODE = '23505'; END $$"
+                )
+            )
+        raise ValueError("F1 application failure")
+
+    monkeypatch.setattr(service, "_append_event", append)
+    with pytest.raises(IntegrityError if database_failure else ValueError):
+        service.authorize_with_retry(
+            factory, plan_id=entries[0].plan.id, idempotency_key="f1-fail"
+        )
+    assert calls == [1]
+    with factory() as session:
+        assert (
+            session.scalar(select(func.count()).select_from(RiskReservationEventRecord))
+            == 0
+        )
+
+
+def test_f1_boundary_rejects_state_change_before_reservation(
+    migrated_postgres_engine, monkeypatch
+):
+    factory, service, _, entries, _, _ = _unlocked_loss_authorization_setup(
+        migrated_postgres_engine
+    )
+    provider = service._loss_locks
+    original = provider.evaluate_in_transaction
+    calls = []
+
+    def changed_state(session, account_id, at):
+        state = original(session, account_id, at)
+        calls.append(1)
+        return (
+            state
+            if len(calls) == 1
+            else state.model_copy(update={"state_version": state.state_version + 1})
+        )
+
+    monkeypatch.setattr(provider, "evaluate_in_transaction", changed_state)
+    result = service.authorize_with_retry(
+        factory, plan_id=entries[0].plan.id, idempotency_key="f1-stale"
+    )
+    assert result.reason == Layer3Reason.LOSS_STATE_VERSION_CONFLICT.value
+    assert result.decision is RiskDecision.DENY
+    assert not result.execution_enabled
+    assert len(calls) == 2
+    with factory() as session:
+        assert (
+            session.scalar(select(func.count()).select_from(RiskReservationEventRecord))
+            == 0
+        )
+
+
+def test_f1_concurrent_boundary_replays_share_one_durable_reservation(
+    migrated_postgres_engine,
+):
+    factory, service, _, entries, _, _ = _unlocked_loss_authorization_setup(
+        migrated_postgres_engine
+    )
+    barrier = Barrier(3)
+
+    def reserve(_):
+        barrier.wait(timeout=10)
+        return service.authorize_with_retry(
+            factory, plan_id=entries[0].plan.id, idempotency_key="f1-concurrent"
+        )
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        results = tuple(executor.map(reserve, range(3)))
+    assert all(
+        result.quantity == 40 and not result.execution_enabled for result in results
+    )
+    assert sum(result.replayed for result in results) == 2
+    assert len({result.reservation_id for result in results}) == 1
+    with factory() as session:
+        assert (
+            session.scalar(select(func.count()).select_from(RiskReservationEventRecord))
+            == 1
+        )
+
+
+def test_f1_boundary_real_lock_timeout_exhausts_without_writes(
+    migrated_postgres_engine,
+):
+    from sqlalchemy import event
+
+    factory, service, account_id, entries, _, _ = _unlocked_loss_authorization_setup(
+        migrated_postgres_engine
+    )
+    attempts = []
+
+    @event.listens_for(factory, "after_begin")
+    def timeout(session, transaction, connection):
+        attempts.append(session)
+        connection.execute(text("SET LOCAL lock_timeout = '50ms'"))
+
+    with sessionmaker(bind=migrated_postgres_engine).begin() as holder:
+        service._lock_account(holder, account_id)
+        with pytest.raises(TransactionRetryExhausted) as info:
+            service.authorize_with_retry(
+                factory,
+                plan_id=entries[0].plan.id,
+                idempotency_key="f1-locked",
+                max_attempts=2,
+            )
+    assert info.value.sqlstate == "55P03"
+    assert len(attempts) == 2 and attempts[0] is not attempts[1]
+    result = service.authorize_with_retry(
+        factory, plan_id=entries[0].plan.id, idempotency_key="f1-locked"
+    )
+    assert result.quantity == 40 and not result.replayed
+    with factory() as session:
+        assert (
+            session.scalar(select(func.count()).select_from(RiskReservationEventRecord))
+            == 1
+        )
+
+
+@pytest.mark.parametrize("exhaust", [False, True])
+def test_f1_retry_helper_handles_real_serialization_conflict(
+    migrated_postgres_engine, exhaust
+):
+    engine = migrated_postgres_engine
+    with engine.begin() as c:
+        c.exec_driver_sql(
+            "CREATE TABLE f1_capacity (id int primary key, value int not null)"
+        )
+        c.exec_driver_sql("INSERT INTO f1_capacity VALUES (1, 0)")
+        c.exec_driver_sql("CREATE TABLE f1_requests (key text primary key)")
+    factory = sessionmaker(
+        bind=engine.execution_options(isolation_level="SERIALIZABLE")
+    )
+    attempts = []
+
+    def work(session):
+        attempts.append(session)
+        session.execute(text("INSERT INTO f1_requests VALUES ('same-key')"))
+        current = session.scalar(text("SELECT value FROM f1_capacity WHERE id=1"))
+        if exhaust or len(attempts) == 1:
+            with engine.begin() as c:
+                c.execute(text("UPDATE f1_capacity SET value=value+1 WHERE id=1"))
+        session.execute(
+            text("UPDATE f1_capacity SET value=:v WHERE id=1"), {"v": current + 1}
+        )
+        return current
+
+    if exhaust:
+        with pytest.raises(TransactionRetryExhausted) as info:
+            run_in_transaction(factory, work, max_attempts=2)
+        assert info.value.sqlstate == "40001"
+    else:
+        assert run_in_transaction(factory, work, max_attempts=2) == 1
+    assert len(attempts) == 2 and attempts[0] is not attempts[1]
+    with engine.connect() as c:
+        assert c.scalar(text("SELECT count(*) FROM f1_requests")) == (
+            0 if exhaust else 1
+        )
+        assert c.scalar(text("SELECT value FROM f1_capacity WHERE id=1")) == 2
+
+
+def test_f1_retry_helper_handles_real_deadlock(migrated_postgres_engine):
+    engine = migrated_postgres_engine
+    with engine.begin() as c:
+        c.exec_driver_sql(
+            "CREATE TABLE f1_deadlock (id int primary key, value int not null)"
+        )
+        c.exec_driver_sql("INSERT INTO f1_deadlock VALUES (1,0),(2,0)")
+        c.exec_driver_sql("CREATE TABLE f1_deadlock_requests (key text primary key)")
+    factory = sessionmaker(bind=engine)
+    barrier = Barrier(2)
+    attempts = []
+
+    def competitor():
+        with engine.begin() as c:
+            c.execute(text("SET LOCAL deadlock_timeout = '5s'"))
+            c.execute(text("SET LOCAL lock_timeout = '10s'"))
+            c.execute(text("UPDATE f1_deadlock SET value=value+1 WHERE id=2"))
+            barrier.wait(timeout=10)
+            c.execute(text("UPDATE f1_deadlock SET value=value+1 WHERE id=1"))
+
+    def work(session):
+        attempts.append(session)
+        session.execute(text("SET LOCAL deadlock_timeout = '50ms'"))
+        session.execute(text("SET LOCAL lock_timeout = '10s'"))
+        session.execute(text("INSERT INTO f1_deadlock_requests VALUES ('same-key')"))
+        session.execute(text("UPDATE f1_deadlock SET value=value+1 WHERE id=1"))
+        if len(attempts) == 1:
+            barrier.wait(timeout=10)
+        session.execute(text("UPDATE f1_deadlock SET value=value+1 WHERE id=2"))
+        return "committed"
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        other = executor.submit(competitor)
+        assert run_in_transaction(factory, work, max_attempts=2) == "committed"
+        other.result(timeout=15)
+    assert len(attempts) == 2
+    with engine.connect() as c:
+        assert c.scalar(text("SELECT count(*) FROM f1_deadlock_requests")) == 1
+        assert c.execute(
+            text("SELECT value FROM f1_deadlock ORDER BY id")
+        ).scalars().all() == [2, 2]
+
+
+@pytest.mark.parametrize("provider_available", [False, True])
+def test_f1_unbound_legacy_replay_is_denied_after_provider_change(
+    migrated_postgres_engine, provider_available
+):
+    factory, legacy, account_id, entries = _postgres_layer3_setup(
+        migrated_postgres_engine
+    )
+    first = legacy.authorize_with_retry(
+        factory, plan_id=entries[0].plan.id, idempotency_key="f1-unbound-legacy"
+    )
+    assert first.decision is not RiskDecision.DENY
+    provider = RepositoryLossLockProvider() if provider_available else None
+    service = Layer3AuthorizationService(
+        policy=POSTGRES_RISK_POLICY,
+        taxonomy=POSTGRES_RISK_TAXONOMY,
+        loss_locks=provider,
+        principal_provider=_PostgresPrincipalProvider(account_id),
+        snapshot_verifier=_PostgresSnapshotVerifier(),
+        ats009_policy_version="ATS-009-v0.1",
+        clock=lambda: POSTGRES_RISK_NOW,
+    )
+    replay = service.authorize_with_retry(
+        factory, plan_id=entries[0].plan.id, idempotency_key="f1-unbound-legacy"
+    )
+    assert replay.decision is RiskDecision.DENY
+    assert replay.reason == Layer3Reason.LOSS_STATE_VERSION_CONFLICT.value
+    assert not replay.execution_enabled
+    with factory() as session:
+        event = session.scalar(select(RiskReservationEventRecord))
+        assert "loss_state" not in event.event_data
+        assert (
+            session.scalar(select(func.count()).select_from(RiskReservationEventRecord))
+            == 1
+        )

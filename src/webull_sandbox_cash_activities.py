@@ -166,7 +166,9 @@ def _cursor_digest(cursor: str | None) -> str | None:
 
 def _parse_amount(value: object) -> Decimal:
     if isinstance(value, bool) or not isinstance(value, (str, int)):
-        raise MalformedResponse("cash activity amount must be a decimal string or integer")
+        raise MalformedResponse(
+            "cash activity amount must be a decimal string or integer"
+        )
     text = str(value)
     if not _DECIMAL_PATTERN.fullmatch(text):
         raise MalformedResponse("cash activity amount is not a plain decimal")
@@ -204,7 +206,9 @@ def _parse_event(
     unknown_fields = set(value) - _EVENT_FIELDS
     required_fields = {"activity_id", "activity_type", "amount", "currency"}
     if unknown_fields or not required_fields.issubset(value):
-        raise MalformedResponse("cash activity entry has an unsupported field structure")
+        raise MalformedResponse(
+            "cash activity entry has an unsupported field structure"
+        )
 
     event_id = value["activity_id"]
     category = value["activity_type"]
@@ -216,7 +220,9 @@ def _parse_event(
     ):
         raise MalformedResponse("cash activity activity_id must be a non-empty string")
     if not isinstance(category, str) or not category.strip():
-        raise MalformedResponse("cash activity activity_type must be a non-empty string")
+        raise MalformedResponse(
+            "cash activity activity_type must be a non-empty string"
+        )
     if (
         not isinstance(currency, str)
         or len(currency) != 3
@@ -243,9 +249,11 @@ def describe_response_shape(body: object) -> dict[str, object]:
 
     def names(mapping: Mapping[object, object]) -> dict[str, str]:
         return {
-            (key if isinstance(key, str) and _SAFE_FIELD_NAME.fullmatch(key) else "<unsafe-name>"): (
-                type(value).__name__
-            )
+            (
+                key
+                if isinstance(key, str) and _SAFE_FIELD_NAME.fullmatch(key)
+                else "<unsafe-name>"
+            ): (type(value).__name__)
             for key, value in list(mapping.items())[:40]
         }
 
@@ -314,11 +322,19 @@ class WebullSandboxCashActivitiesAdapter:
     ) -> None:
         if not isinstance(selected_account_id, str) or not selected_account_id.strip():
             raise ValueError("selected_account_id must be a non-empty string")
-        if start_time is not None and (not isinstance(start_time, str) or not start_time.strip()):
+        if start_time is not None and (
+            not isinstance(start_time, str) or not start_time.strip()
+        ):
             raise ValueError("start_time must be a non-empty string when provided")
-        if end_time is not None and (not isinstance(end_time, str) or not end_time.strip()):
+        if end_time is not None and (
+            not isinstance(end_time, str) or not end_time.strip()
+        ):
             raise ValueError("end_time must be a non-empty string when provided")
-        if isinstance(max_pages, bool) or not isinstance(max_pages, int) or max_pages < 1:
+        if (
+            isinstance(max_pages, bool)
+            or not isinstance(max_pages, int)
+            or max_pages < 1
+        ):
             raise ValueError("max_pages must be a positive integer")
         self._gateway = gateway
         self._account_id = selected_account_id.strip()
@@ -367,7 +383,9 @@ class WebullSandboxCashActivitiesAdapter:
 
             observed_at = self._clock()
             if observed_at.tzinfo is None or observed_at.utcoffset() is None:
-                raise CashActivitiesError("local observed_at clock must be timezone-aware")
+                raise CashActivitiesError(
+                    "local observed_at clock must be timezone-aware"
+                )
             provenance = PaginationProvenance(
                 page_number=page_number,
                 requested_cursor_digest=_cursor_digest(cursor),

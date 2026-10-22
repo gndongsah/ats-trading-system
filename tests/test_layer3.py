@@ -282,7 +282,7 @@ def test_layer3_reserves_a_bound_quantity_and_is_idempotent(tmp_path):
         assert first.quantity == 40
         assert first.reservation_id is not None
         assert first.execution_enabled is False
-        assert retry == first
+        assert retry == first.model_copy(update={"replayed": True})
         with factory() as session:
             count = session.scalar(
                 select(func.count()).select_from(RiskReservationEventRecord)
@@ -310,7 +310,7 @@ def test_new_idempotency_key_cannot_reauthorize_same_plan_after_cancel(tmp_path)
         retry = authorize(factory, service, account_id, plan_id, "request-1")
         replay = authorize(factory, service, account_id, plan_id, "request-2")
 
-        assert retry == first
+        assert retry == first.model_copy(update={"replayed": True})
         assert replay.decision is RiskDecision.DENY
         assert replay.reason == Layer3Reason.PLAN_ALREADY_RESERVED
         with factory() as session:
