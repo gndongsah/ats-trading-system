@@ -12,7 +12,16 @@ Rule applied throughout: requirements come **only** from the sources in §1.
 Implementation constants and tests are recorded as "what the code does", never as
 evidence of what is required.
 
-## 1. Source register and accessibility
+## Review status and precedence within this report
+
+Sections 1–9 preserve the initial coding-agent report, whose environment lacked
+Notion access. **Section 10 supersedes its SOURCE-UNRETRIEVED labels, requests
+for Notion access, endpoint-approval questions and next-task recommendation.**
+Do not treat those historical requests as current blockers. No universal
+source-approval hierarchy is invented; explicit recorded project configuration
+is distinguished from the broader original strategy ranges.
+
+## 1. Initial agent source register and accessibility
 
 | ID | Source | Version / date | Access | Role |
 |---|---|---|---|---|
@@ -217,3 +226,69 @@ unimplemented.
 4. Broker-backed capture remains blocked on the §7.3 items.
 
 Sprint 3 acceptance is not declared and is not claimed by this document.
+
+
+## 10. Work reconciliation against retrieved Notion sources
+
+Retrieved 2026-10-22 America/Chicago. These are source snapshots, not changes to
+Notion requirements or new owner approvals. Work has read the attached 19-page
+PDF; SHA-256 matches S1 exactly (case-insensitive). PDF pages 3, 4 and 19 confirm
+the broader loss/heat/concentration ranges. No policy code changed.
+
+### 10.1 Retrieved source register
+
+| Source | Link / retrieved source timestamp | Requirement record |
+|---|---|---|
+| N7 ATS-007 | [Sizing story](https://app.notion.com/p/3f08afe63921814887dcd6d3013c7b89), fetched source as of 2026-10-16T21:22:33.688Z | Risk dollars, stop distance, regime multiplier and shares reproduce known worked examples. Standalone sizing accepted; not an execution gate. |
+| N8 ATS-008 | [Heat story](https://app.notion.com/p/3f08afe639218117a7d7f4ecd53f5612), source as of 2026-10-05T23:29:31.624Z | Breaches of 4–5R total / 2–2.5R correlated-theme risk are resized or denied. Story remains Backlog in retrieved properties; implementation evidence alone does not update acceptance. |
+| N9 ATS-009 | [Loss-lock story](https://app.notion.com/p/3f08afe6392181228e02ecd6539bff6f), current fetch 2026-10-23 UTC | Current Acceptance Criteria explicitly require daily −3R / weekly −6R inclusive sticky locks, frozen authenticated separate openings, trusted flow-adjusted NLV, authoritative session/broker events, current version binding, PostgreSQL atomicity/retry and fail-closed Layer 3 tests. No enforcement before broker reconciliation and independent end-to-end review. Status In Progress. |
+| NS3 Sprint 3 | [Risk Engine sprint](https://app.notion.com/p/3f08afe6392181f78830e2540634e2d3), source as of 2026-10-22T15:39:12.254Z | Exit Criteria: sizing, regime multiplier, portfolio/theme heat, loss locks, allow/resize/deny and risk tests pass. Goal: non-bypassable deterministic Layer 3 gate. Scheduled Nov 2–15, 2026; status Planned. |
+| NS3 policy record | Same Sprint 3 page, section dated 2026-10-16, “Portfolio risk policy approved” | Approved configuration for specification: reference 1R = 0.5% of validated account equity; account heat ≤4R; correlated-theme/factor heat ≤2R; gross single-theme concentration ≤15% of account equity. Tighter stops reduce measured planned risk only after confirmation. Enforcement NO-GO pending authoritative evidence and atomic/lifecycle requirements. |
+
+### 10.2 Reconciled requirements and traceability
+
+| Requirement | Sources and relationship | Implementation/test pointers | Current gap |
+|---|---|---|---|
+| Reference R / heat / concentration endpoints | NS3 explicit approved configuration selects 0.5%, 4R, 2R and 15% within S1/N8 ranges. This resolves historical O-6/C-2/D-4 endpoint-approval uncertainty. | `PortfolioRiskPolicy`, `assess_portfolio_risk`; total/correlated heat and theme-boundary cases in §6 | Exact meaning/time of validated account equity remains unspecified. Do not switch current snapshot basis to min/opening equity on recommendation alone. |
+| Daily/weekly locks | N9 explicit current criteria select −3R/−6R and stickiness within the PDF's weekly range. −8R is not an alternative supported by current ATS-009 criteria. | Existing limit-validation, inclusive boundary and F6 persistence/rollover cases in §6 | Historical authorship/approval chronology of N9 cannot be inferred from a current page fetch; no global precedence policy retrieved. No need to ask owner to resupply the current −6R criterion. |
+| Separate frozen authenticated openings and adjusted NLV | N9 current acceptance criterion, not merely unretrieved chat | `PeriodOpeningEquity`, loss-accounting denominator/flow cases and F6 tests | Capture service/authentication/correction policy absent; broker-backed evidence remains incomplete. |
+| ATS-007 standalone sizing | N7 worked-example acceptance, S1 risk hierarchy | `risk.py`, sizing/regime tests cited §6 | Source and timestamp/convention for sizing equity at integrated gate still need a precise requirement. Standalone arithmetic acceptance is not source authentication. |
+| Sprint 3 exit | NS3 current properties, safety conditions in NS3/N9 | Existing suite covers synthetic sizing/multiplier/heat/locks/allow-resize-deny; F8 guards | Traceability is now available, but source-authority and integrated gate acceptance still incomplete. Do not mark Sprint 3 Complete. |
+
+### 10.3 Remaining decisions only
+
+- D-1/D-2/D-3 narrowed: NS3 already specifies validated account equity and
+  account-equity concentration. The exact metric (NLV versus other equity),
+  as-of convention, one-snapshot coupling for sizing/heat/theme, and any
+  intraday deposit treatment still need explicit source text. Retain existing
+  behavior while resolving these; A/B/C recommendations above are not approvals.
+- D-4 endpoint approvals are retrieved as above; no repeated approval requested.
+- D-5 access blocker is resolved in Work. No export is needed from the owner.
+  A universal change-approval precedence rule has not been retrieved; do not
+  invent one or infer it merely from page modification dates.
+- D-6 remains open: capture-window duration and valuation-age policies, plus
+  whether boundary as-of must be exact or tolerate a documented offset.
+- Opening restatements/correction references in §7 are **proposals**, not newly
+  approved policy. Existing unique opening identity rejects changed replay;
+  versioned opening replacement needs a separately reviewed contract/migration.
+- `SIMULATION-ONLY` is the existing provenance label. Simulation chronology is
+  deterministic model time, not a broker's observation time; broker capture
+  requires independently established timestamp semantics. Do not transplant
+  synthetic backfill assumptions into broker-backed capture.
+- Existing model provenance/boolean checks alone do not prove synthetic facts
+  are rejected by every future broker consumer. Require an explicit trust-boundary
+  test when such a consumer is implemented.
+
+### 10.4 Revised next task and evidence limits
+
+First record a precise, source-linked equity metric/as-of and opening timing
+policy, using the retrieved sources and requesting only unresolved choices.
+Then implement simulation-only opening capture under that policy. No code or
+migration is authorized by this document, and no source ambiguity is resolved by
+choosing the more conservative-looking formula without approval.
+
+Work review at this revision is documentation/source reconciliation, not
+independent approval of its newly authored text. No tests were rerun for this
+docs-only change. Prior final F8 evidence is **704 passed/zero skipped** at
+`5e4dc87`, including Work's deprecated-copy fix; the historical 702-case author
+run in §8 describes the earlier F8 head. All safety/acceptance gates remain.
