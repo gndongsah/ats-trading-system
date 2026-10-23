@@ -599,11 +599,14 @@ class Layer3AuthorizationService:
                     return self._deny(Layer3Reason.PLAN_ALREADY_RESERVED)
                 exposures.append(exposure)
 
+        requested_quantity = self._sized_quantity(plan, snapshot)
+        if requested_quantity <= 0:
+            return self._deny(Layer3Reason.PORTFOLIO_RISK_DENIED)
         result = assess_portfolio_risk(
             snapshot=snapshot,
             candidate=CandidateExposure(
                 ticker=plan.security.ticker,
-                requested_quantity=int(plan_quantity),
+                requested_quantity=min(int(plan_quantity), requested_quantity),
                 entry=plan.entry,
                 stop=plan.stop,
             ),
@@ -634,7 +637,11 @@ class Layer3AuthorizationService:
             created_at=now,
         )
         decision = Layer3Decision(
-            decision=result.decision,
+            decision=(
+                RiskDecision.RESIZE
+                if result.quantity < int(plan_quantity)
+                else result.decision
+            ),
             quantity=result.quantity,
             reason=result.reason.value,
             reservation_id=reservation_id,
@@ -657,6 +664,10 @@ class Layer3AuthorizationService:
             },
         )
         return decision
+
+    def _sized_quantity(self, plan: TradePlan, snapshot: PortfolioSnapshot) -> int:
+        """Default preserves existing externally sized plans."""
+        return int(plan.quantity)
 
     def _read_loss_state(
         self, session: Session, account_id: UUID, now: datetime
