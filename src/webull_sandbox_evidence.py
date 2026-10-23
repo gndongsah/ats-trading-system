@@ -19,6 +19,10 @@ from decimal import Decimal
 from typing import Any
 
 from src.cash_history_comparison import comparison_windows, summarize_protocol
+from src.desktop_deposit_comparison import (
+    compare_desktop_deposit,
+    parse_desktop_deposit,
+)
 from src.webull_sandbox_cash_activities import (
     OfficialSdkCashActivitiesGateway,
     WebullSandboxCashActivitiesAdapter,
@@ -317,6 +321,7 @@ def run(
     end_time: str | None = None,
     overlap_start_time: str | None = None,
     enclosing_end_time: str | None = None,
+    desktop_deposit_input: Callable[[], tuple[str, str, str, str]] | None = None,
     expected_nlv_input: Callable[[], str] | None = None,
     expected_cash_input: Callable[[], str] | None = None,
     expected_deposit_input: Callable[[], str] | None = None,
@@ -347,6 +352,19 @@ def run(
         print("result: BLOCKED")
         print("input_error: MALFORMED_EXPECTED_AMOUNT")
         return 2
+    desktop_expected = None
+    if desktop_deposit_input is not None:
+        if window == (None, None) or paper_identifier_input is None:
+            print("result: BLOCKED")
+            print("input_error: DESKTOP_COMPARISON_REQUIRES_WINDOW_AND_IDENTIFIER")
+            return 2
+        try:
+            desktop_expected = parse_desktop_deposit(desktop_deposit_input())
+        except (ValueError, WebullReadOnlyError):
+            print("result: BLOCKED")
+            print("input_error: INVALID_DESKTOP_DEPOSIT")
+            return 2
+    desktop_summary = None
     strict_cash = window != (None, None) or expected_deposit_input is not None
     cash_summary: dict | None = None
     comparison_summary = None
@@ -415,6 +433,8 @@ def run(
                     max_pages=_MAX_PAGES,
                 ).fetch_history()
                 cash_summary = summarize_cash_history(history, expected_deposit)
+                if desktop_deposit_input is not None:
+                    desktop_summary = compare_desktop_deposit(history, desktop_expected)
                 cash_complete = history.pagination_complete
                 cash_stop_reason = "TERMINAL_CURSOR"
                 if protocol is not None:
@@ -499,6 +519,11 @@ def run(
     if cash_gateway is not None:
         for index, page in enumerate(cash_gateway.pages, start=1):
             print(f"cash_activities_page_{index}:", page)
+    if desktop_deposit_input is not None:
+        print(
+            "desktop_deposit_comparison:",
+            desktop_summary if cash_complete else "NOT_COMPLETED",
+        )
     if protocol is not None:
         print("cash_history_comparison:", comparison_summary or "NOT_COMPLETED")
     print("cash_activities_pages:", len(cash_gateway.pages) if cash_gateway else 0)
@@ -551,12 +576,28 @@ def main() -> int:
     parser.add_argument(
         "--enclosing-end-time", help="end of enclosing comparison window"
     )
+    parser.add_argument(
+        "--compare-desktop-deposit",
+        action="store_true",
+        help="hidden same-record amount/date/USD/documented deposit subtype comparison",
+    )
     args = parser.parse_args()
 
     def hidden(label: str) -> Callable[[], str]:
         return lambda: getpass.getpass(f"{label} (hidden, blank to skip): ")
 
+    def desktop_inputs() -> tuple[str, str, str, str]:
+        return (
+            getpass.getpass(
+                "Desktop deposit amount (hidden; all four blank to skip): "
+            ),
+            getpass.getpass("Desktop displayed deposit date (hidden; yyyy-MM-dd): "),
+            getpass.getpass("Desktop deposit currency (hidden; USD): "),
+            getpass.getpass("Documented deposit subtype (hidden; e.g. WIRE or ACH): "),
+        )
+
     return run(
+        desktop_deposit_input=desktop_inputs if args.compare_desktop_deposit else None,
         paper_identifier_input=(
             lambda: getpass.getpass("Desktop paper account identifier (hidden): ")
         )
