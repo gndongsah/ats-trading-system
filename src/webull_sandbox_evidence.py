@@ -15,9 +15,14 @@ import shutil
 import sys
 import tempfile
 from collections.abc import Callable, Mapping
+from decimal import Decimal
 from typing import Any
 
-from src.webull_sandbox_cash_activities import OfficialSdkCashActivitiesGateway
+from src.webull_sandbox_cash_activities import (
+    OfficialSdkCashActivitiesGateway,
+    WebullSandboxCashActivitiesAdapter,
+    _validate_query_window,
+)
 from src.webull_sandbox_credentials import (
     SOURCE_ENVIRONMENT,
     SOURCE_KEYRING,
@@ -230,6 +235,66 @@ def paper_identifier_match(body: object, selected_id: str, identifier: str) -> s
     return "EXACT_IDENTIFIER_MATCH_OBSERVED"
 
 
+_EXPECTED_DECIMAL = re.compile(r"-?(0|[1-9]\d{0,14})(\.\d{1,8})?\Z")
+
+
+def parse_expected_amount(text: object, *, allow_negative: bool = False) -> Decimal:
+    """Parse operator-typed money without echoing or accepting ambiguous forms."""
+    if not isinstance(text, str) or not _EXPECTED_DECIMAL.fullmatch(text):
+        raise ValueError("expected amount is malformed")
+    value = Decimal(text)
+    if not value.is_finite() or (value < 0 and not allow_negative):
+        raise ValueError("expected amount is malformed")
+    return value
+
+
+def _prompt_optional_amount(
+    reader: Callable[[], str] | None, *, allow_negative: bool = False
+) -> Decimal | None:
+    """Return None when skipped; ValueError when entered but malformed."""
+    if reader is None:
+        return None
+    text = reader()
+    if text == "":
+        return None
+    return parse_expected_amount(text, allow_negative=allow_negative)
+
+
+def compare_amount(expected: Decimal | None, actual: Decimal | None) -> str:
+    if expected is None:
+        return "NOT_REQUESTED"
+    if actual is None:
+        return "ACTUAL_UNAVAILABLE"
+    return "MATCH" if expected == actual else "MISMATCH"
+
+
+def summarize_cash_history(history: Any, expected_deposit: Decimal | None) -> dict:
+    """Counts and documented category labels only; no ids, amounts or times."""
+    by_type: dict[str, int] = {}
+    for event in history.events:
+        key = f"{event.raw_category}/{event.raw_subcategory}"
+        by_type[key] = by_type.get(key, 0) + 1
+    if expected_deposit is None:
+        deposit = "NOT_REQUESTED"
+        matches = 0
+    else:
+        matches = sum(
+            1
+            for event in history.events
+            if event.raw_category == "DEPOSIT" and event.amount == expected_deposit
+        )
+        deposit = "MATCH" if matches else "NO_MATCH"
+    return {
+        "event_count": len(history.events),
+        "reversal_ambiguous_count": sum(
+            1 for event in history.events if event.reversal_ambiguous
+        ),
+        "type_subtype_counts": dict(sorted(by_type.items())),
+        "expected_deposit": deposit,
+        "expected_deposit_matching_record_count": matches,
+    }
+
+
 def _print_shapes(
     statuses: Mapping[str, int | str], shapes: Mapping[str, object]
 ) -> None:
@@ -247,12 +312,38 @@ def run(
     build_trade_client: Callable[[str, str], Any] | None = None,
     keyring_module: Any | None = None,
     paper_identifier_input: Callable[[], str] | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    expected_nlv_input: Callable[[], str] | None = None,
+    expected_cash_input: Callable[[], str] | None = None,
+    expected_deposit_input: Callable[[], str] | None = None,
 ) -> int:
     environ = os.environ if environ is None else environ
     isatty = sys.stdin is not None and sys.stdin.isatty() if isatty is None else isatty
     if environ.get("WEBULL_API_DEBUG"):
         print("result: BLOCKED (WEBULL_API_DEBUG must be unset)")
         return 2
+    # Validate every operator input before credentials or the network are used.
+    try:
+        window = _validate_query_window(start_time, end_time)
+    except ValueError as error:
+        print("result: BLOCKED")
+        print("input_error: INVALID_QUERY_WINDOW")
+        print("detail:", error)
+        return 2
+    try:
+        expected_nlv = _prompt_optional_amount(expected_nlv_input, allow_negative=True)
+        expected_cash = _prompt_optional_amount(
+            expected_cash_input, allow_negative=True
+        )
+        expected_deposit = _prompt_optional_amount(expected_deposit_input)
+    except ValueError:
+        print("result: BLOCKED")
+        print("input_error: MALFORMED_EXPECTED_AMOUNT")
+        return 2
+    strict_cash = window != (None, None) or expected_deposit_input is not None
+    cash_summary: dict | None = None
+    nlv_status = cash_status = "NOT_REQUESTED"
     try:
         credentials = load_sandbox_credentials(
             environ=environ, keyring_module=keyring_module
@@ -301,9 +392,25 @@ def run(
             cash_gateway = _CapturingCashGateway(
                 OfficialSdkCashActivitiesGateway(trade_client.activity)
             )
+            nlv_status = compare_amount(expected_nlv, snapshot.net_liquidation.value)
+            cash_field = snapshot.optional_amounts.get("cash_balance")
+            cash_status = compare_amount(
+                expected_cash, cash_field.value if cash_field else None
+            )
             cursor: str | None = None
             seen: set[str] = set()
-            for _ in range(_MAX_PAGES):
+            if strict_cash:
+                history = WebullSandboxCashActivitiesAdapter(
+                    cash_gateway,
+                    selected_account_id=selected.account_id,
+                    start_time=window[0],
+                    end_time=window[1],
+                    max_pages=_MAX_PAGES,
+                ).fetch_history()
+                cash_summary = summarize_cash_history(history, expected_deposit)
+                cash_complete = history.pagination_complete
+                cash_stop_reason = "TERMINAL_CURSOR"
+            for _ in range(0 if strict_cash else _MAX_PAGES):
                 response = cash_gateway.list_cash_activities(
                     selected.account_id,
                     start_time=None,
@@ -323,7 +430,8 @@ def run(
                     seen.add(cursor)
                 cursor = next_cursor
             else:
-                cash_stop_reason = "PAGE_LIMIT"
+                if not strict_cash:
+                    cash_stop_reason = "PAGE_LIMIT"
     except WebullReadOnlyError as error:
         cash_stop_reason = type(error).__name__
         print("request_result: FAIL")
@@ -370,9 +478,17 @@ def run(
         for index, page in enumerate(cash_gateway.pages, start=1):
             print(f"cash_activities_page_{index}:", page)
     print("cash_activities_pages:", len(cash_gateway.pages) if cash_gateway else 0)
+    print("cash_query_window:", window if window != (None, None) else "DEFAULT_OMITTED")
+    print("balance_nlv_comparison:", nlv_status)
+    print("balance_cash_comparison:", cash_status)
+    if cash_summary is not None:
+        print("cash_activity_summary:", cash_summary)
+        print("cash_parser: STRICT_DOCUMENTED_SCHEMA")
+        print("biz_time: RAW_UNVERIFIED_FORMAT_AND_TIMEZONE")
+        print("reversal_linkage: NOT_INFERRED")
     print("cash_pagination_terminal_for_request_sequence:", cash_complete)
     print("cash_pagination_stop_reason:", cash_stop_reason)
-    print("cash_history_coverage: UNVERIFIED (account-only default window)")
+    print("cash_history_coverage: UNVERIFIED (empty or matching results are not proof)")
     print("cash_category_and_sign_semantics: UNVERIFIED")
     print(
         "account_identity_binding: UNVERIFIED (API sandbox account is not linked to desktop)"
@@ -393,13 +509,40 @@ def run(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--map-paper-account", action="store_true")
+    parser.add_argument("--start-time", help="UTC yyyy-MM-ddTHH:mm:ss.SSSZ")
+    parser.add_argument("--end-time", help="UTC yyyy-MM-ddTHH:mm:ss.SSSZ")
+    parser.add_argument(
+        "--compare-balance",
+        action="store_true",
+        help="hidden prompts for expected desktop NLV and cash balance",
+    )
+    parser.add_argument(
+        "--check-deposit",
+        action="store_true",
+        help="hidden prompt for an expected deposit amount",
+    )
     args = parser.parse_args()
+
+    def hidden(label: str) -> Callable[[], str]:
+        return lambda: getpass.getpass(f"{label} (hidden, blank to skip): ")
+
     return run(
         paper_identifier_input=(
             lambda: getpass.getpass("Desktop paper account identifier (hidden): ")
         )
         if args.map_paper_account
-        else None
+        else None,
+        start_time=args.start_time,
+        end_time=args.end_time,
+        expected_nlv_input=hidden("Expected desktop NLV")
+        if args.compare_balance
+        else None,
+        expected_cash_input=hidden("Expected desktop cash")
+        if args.compare_balance
+        else None,
+        expected_deposit_input=hidden("Expected deposit amount")
+        if args.check_deposit
+        else None,
     )
 
 
