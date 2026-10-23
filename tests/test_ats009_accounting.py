@@ -626,3 +626,49 @@ def test_contracts_are_immutable_and_provenance_is_not_authentication() -> None:
     assert result.available
     assert not hasattr(result, "authenticated")
     assert not hasattr(result, "sticky_locked")
+
+
+@pytest.mark.parametrize(
+    ("pnl", "daily_crossed", "weekly_crossed"),
+    [("-1499.99", False, False), ("-1500", True, False), ("-3600", True, True)],
+)
+def test_simulation_ledger_drives_existing_loss_engine(
+    pnl, daily_crossed, weekly_crossed
+):
+    from src.simulation_ledger import (
+        SOURCE,
+        EntryKind,
+        SimulationEntry,
+        SimulationLedger,
+    )
+
+    ledger = SimulationLedger(
+        account_id=ACCOUNT_ID, opened_at=WEEK_OPEN, opening_nlv="100000"
+    )
+    for event_id, kind, amount in [
+        ("deposit", EntryKind.EXTERNAL_FLOW, "20000"),
+        ("withdrawal", EntryKind.EXTERNAL_FLOW, "-5000"),
+        ("pnl", EntryKind.PNL, pnl),
+    ]:
+        ledger = ledger.append(
+            SimulationEntry(
+                event_id=event_id, occurred_at=AS_OF, kind=kind, amount=amount
+            )
+        )
+    day = _opening(PeriodKind.DAILY).model_copy(
+        update={"source_id": SOURCE, "source_epoch": SOURCE}
+    )
+    week = _opening(PeriodKind.WEEKLY).model_copy(
+        update={"source_id": SOURCE, "source_epoch": SOURCE}
+    )
+    result = _evaluate(
+        valuation=ledger.valuation(AS_OF),
+        day_opening=day,
+        week_opening=week,
+        day_flow_state=ledger.flows(day, AS_OF),
+        week_flow_state=ledger.flows(week, AS_OF),
+    )
+    assert result.available, result.unavailable_reasons
+    assert result.daily_net_pnl == result.weekly_net_pnl == Fraction(pnl)
+    assert result.daily_threshold_crossed is daily_crossed
+    assert result.weekly_threshold_crossed is weekly_crossed

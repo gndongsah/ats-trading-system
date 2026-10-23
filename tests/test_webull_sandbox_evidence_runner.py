@@ -324,3 +324,62 @@ def test_runner_source_is_machine_independent_and_has_no_order_calls():
     assert "C:/Users/" not in source
     for token in ("place_order", "order_v", "submit_order"):
         assert token not in source
+
+
+def test_paper_identifier_comparison_requires_unique_exact_match():
+    from src.webull_sandbox_evidence import paper_identifier_match
+
+    body = {"data": [{"account_id": ACCOUNT_ID, "account_number": "PAPER-1234"}]}
+    assert (
+        paper_identifier_match(body, ACCOUNT_ID, "PAPER-1234")
+        == "EXACT_IDENTIFIER_MATCH_OBSERVED"
+    )
+    assert paper_identifier_match(body, ACCOUNT_ID, "1234") == "NO_UNIQUE_EXACT_MATCH"
+    assert (
+        paper_identifier_match(body, "another", "PAPER-1234")
+        == "MATCHES_DIFFERENT_API_ACCOUNT"
+    )
+    assert (
+        paper_identifier_match({"data": body["data"] * 2}, ACCOUNT_ID, "PAPER-1234")
+        == "NO_UNIQUE_EXACT_MATCH"
+    )
+    assert (
+        paper_identifier_match(body, ACCOUNT_ID, " PAPER-1234") == "INVALID_IDENTIFIER"
+    )
+
+
+def test_mapping_mismatch_stops_before_balance_and_never_prints_identifier(capsys):
+    account = FakeAccountApi()
+    status = run(
+        environ=ENV,
+        keyring_module=EmptyKeyring(),
+        isatty=True,
+        input_fn=lambda _: "1",
+        paper_identifier_input=lambda: "PRIVATE-PAPER-ID",
+        build_trade_client=lambda *_: FakeTradeClient(account, FakeActivityApi([])),
+    )
+    output = capsys.readouterr().out
+    assert status == 1
+    assert account.calls == [("account_list", None)]
+    assert "PRIVATE-PAPER-ID" not in output
+    assert "NO_UNIQUE_EXACT_MATCH" in output
+
+
+def test_exact_mapping_observation_keeps_binding_and_enforcement_unverified(capsys):
+    account = FakeAccountApi()
+    status = run(
+        environ=ENV,
+        keyring_module=EmptyKeyring(),
+        isatty=True,
+        input_fn=lambda _: "1",
+        paper_identifier_input=lambda: ACCOUNT_ID,
+        build_trade_client=lambda *_: FakeTradeClient(
+            account, FakeActivityApi([{"data": []}])
+        ),
+    )
+    output = capsys.readouterr().out
+    assert status == 0
+    assert "EXACT_IDENTIFIER_MATCH_OBSERVED" in output
+    assert ACCOUNT_ID not in output
+    assert "account_identity_binding: UNVERIFIED" in output
+    assert "enforcement_eligible: False" in output
