@@ -12,38 +12,33 @@ Rule applied throughout: requirements come **only** from the sources in §1.
 Implementation constants and tests are recorded as "what the code does", never as
 evidence of what is required.
 
-## Review status and precedence within this report
+## 1. Source register and accessibility
 
-Sections 1–9 preserve the initial coding-agent report, whose environment lacked
-Notion access. **Section 10 supersedes its SOURCE-UNRETRIEVED labels, requests
-for Notion access, endpoint-approval questions and next-task recommendation.**
-Do not treat those historical requests as current blockers. No universal
-source-approval hierarchy is invented; explicit recorded project configuration
-is distinguished from the broader original strategy ranges.
+Source snapshots were retrieved by Work on 2026-10-22 America/Chicago.
+Notion fetch exposes an as-of timestamp, not an immutable revision ID; no
+revision identifier or historical approval authorship is inferred. The dated
+approval section is distinguished from the page's last-change timestamp.
 
-## 1. Initial agent source register and accessibility
+| ID | Source | Version / date | Access / role |
+|---|---|---|---|
+| S1 | Trading Strategy Playbook.pdf, 19 pages | Version 3, October 2026; SHA-256 `f9f632fc73b6eaa24f2304caa03c0fe7d29869e17c058da465f3fb8ee714cf26` | Read by author and Work; original strategy ranges. |
+| S2 | `playbook/playbook_v3.yaml` | v3.0, commit `06e7fc4`, 2026-10-06 | Read; Layer 0/1 scoring only, no risk-basis parameters. |
+| S3a | [ATS-007](https://app.notion.com/p/3f08afe63921814887dcd6d3013c7b89) | Fetch as of 2026-10-16T21:22:33.688Z; immutable revision ID unavailable | Retrieved; standalone sizing worked-example criteria. |
+| S3b | [ATS-008](https://app.notion.com/p/3f08afe639218117a7d7f4ecd53f5612) | Fetch as of 2026-10-05T23:29:31.624Z; immutable revision ID unavailable | Retrieved; broad 4–5R / 2–2.5R heat ranges, resize/deny. |
+| S3c | [ATS-009](https://app.notion.com/p/3f08afe6392181228e02ecd6539bff6f) | Fetch as of 2026-10-23T04:00:00.705Z (Oct 22 Chicago); immutable revision ID and historical approval date unavailable | Retrieved current Acceptance Criteria: −3R/−6R inclusive sticky locks, separate frozen authenticated openings, adjusted NLV, authoritative events and atomicity/retry. |
+| S3d | [Sprint 3](https://app.notion.com/p/3f08afe6392181f78830e2540634e2d3) | Fetch as of 2026-10-22T15:39:12.254Z; section “Portfolio risk policy approved” dated **2026-10-16**; immutable revision ID unavailable | Retrieved approved specification: 0.5% reference R, 4R total, 2R correlated, 15% gross theme concentration; also sprint exit criteria. |
+| S4 | Owner task statements, 2026-10-22 | Conversation evidence, not a versioned requirements document | Retained where more detailed than retrieved sources; not a substitute for source approval. |
+| S5 | Repository policy/configuration | No standalone ATS-008/009/Sprint 3 requirements file before this report | Source register now supplies external traceability. Implementation constants are not requirements. |
 
-| ID | Source | Version / date | Access | Role |
-|---|---|---|---|---|
-| S1 | *Trading Strategy Playbook.pdf* ("Version 3 … October 2026 — Revised playbook", 19 pp.) | PDF metadata created 2026-10-03; local file modified 2026-10-05; SHA-256 `F9F632FC…CF26` (full: `F9F632FC73B6EAA24F2304CAA03C0FE7D29869E17C058DA465F3FB8EE714CF26`) | **READ** (owner's local copy; text extracted with a temporary `pypdf`, nothing added to the repo) | Original strategy requirements |
-| S2 | `playbook/playbook_v3.yaml` (`version: "3.0"`, commit `06e7fc4`, 2026-10-06) | versioned in repo | **READ** | Layer 0/1 scoring weights/thresholds only. **Contains no risk-limit, equity-basis or loss-lock parameter.** |
-| S3 | Notion backlog: ATS-008, ATS-009, Sprint 3 exit criteria | unknown | **INACCESSIBLE** — this session has no Notion tool, and no Notion URL or export exists in the repo or git history | Would be the authority for ATS tickets, exit criteria and any approved amendments |
-| S4 | Owner-stated policy in task prompts (ATS-009D/E/F6/F7/F8, 2026-10-22) | session text, not a retrievable document | READ (conversation only) | Treated as *owner-stated, unconfirmed against S3*. Not a versioned source; cannot establish precedence. |
-| S5 | Repo policy/configuration documents | none exist | — | The repo has no ATS-008 spec, no ATS-009 policy, no Sprint 3 exit criteria, no equity-basis document (confirmed by `git grep`; consistent with F7 §1) |
-| — | Repo `docs/ATS-009F1…F8` | 2026-10-22 | READ | Evidence/audit documents. **Not requirement sources.** |
-| — | GitHub PRs / Notion comment history | — | PR #10 (F7) is merged; it is an audit, not a requirements source | — |
-
-**Blockers from inaccessible sources:** S3 is the only place ATS-008/ATS-009
-requirement text, sprint exit criteria, approval records and a documented
-approval-precedence rule can live. Without it this document cannot (a) quote
-ATS-008/009 acceptance criteria, (b) distinguish "approved amendment" from
-"owner chat statement" with authority, or (c) apply a documented precedence
-rule. Every affected row is marked **SOURCE-UNRETRIEVED**.
+S3a–S3d are collectively S3 below. Access and endpoint-selection blockers are
+resolved. No universal approval-precedence rule was retrieved: this report uses
+explicit recorded configuration within the broader strategy ranges, not a rule
+that newer pages automatically override older ones. Source retrieval and these
+edits were performed by Work; the coding agent did not independently read Notion.
 
 ## 2. Requirements snapshot
 
-Legend — *Origin*: **ORIG** = in S1 as written; **OWNER** = S4 only (possible later
-amendment, approval record unretrieved); **NONE** = no accessible source.
+Legend — *Origin*: **ORIG** = S1 strategy text; **OWNER** = task detail retained where not explicitly covered by S3; **APPROVED CONFIGURATION** = dated S3d record; **RETRIEVED** = current Notion requirement. No original authorship is inferred from a current fetch.
 
 | Req | Requirement (as stated in source) | Source | Origin |
 |---|---|---|---|
@@ -58,11 +53,11 @@ amendment, approval record unretrieved); **NONE** = no accessible source.
 | O-3 | Locks are sticky: remain after NLV recovery until a valid period reset; next-session rollover clears only daily; weekly persists to new week. | S4 (ATS-009E/F6) | OWNER |
 | O-4 | P&L is flow-adjusted NLV: deposits/withdrawals are not trading P&L; fees are. | S4 (ATS-009D/F6) | OWNER |
 | O-5 | Missing/stale opening, valuation or flow evidence denies new risk. | S4 (F6) | OWNER |
-| O-6 | Heat caps are fixed "v0.1 policy": total 4R, correlated 2R, theme 15% of equity, 1R = 0.5%; alternate values rejected. | repo code comment "approved v0.1 policy" and F7 matrix; no retrievable approval | OWNER/NONE |
+| O-6 | Reference 1R = 0.5% of validated account equity; total heat ≤4R; correlated-theme/factor heat ≤2R; gross theme concentration ≤15% of account equity. | S3d approved specification, 2026-10-16 | APPROVED CONFIGURATION |
 | O-7 | Enforcement, Layer 3 authorization and all paper/live order submission stay disabled. | S4 (every task) | OWNER |
-| A-8 | ATS-008 requirements | — | **SOURCE-UNRETRIEVED (S3)** |
-| A-9 | ATS-009 ticket acceptance criteria | — | **SOURCE-UNRETRIEVED (S3)** |
-| A-S3 | Sprint 3 exit criteria (only Sprint 1 criterion exists, in README) | — | **SOURCE-UNRETRIEVED (S3)** |
+| A-8 | Heat breaches are resized or denied; broad 4–5R / 2–2.5R ranges. | S3b; endpoints selected by S3d | RETRIEVED |
+| A-9 | −3R/−6R inclusive sticky locks, authenticated separate frozen openings, trusted adjusted NLV/events, version binding, PostgreSQL atomicity/retry, fail-closed Layer 3. | S3c current Acceptance Criteria | RETRIEVED |
+| A-S3 | Sizing, regime multiplier, portfolio/theme heat, loss locks, allow/resize/deny and risk tests pass. | S3d Exit Criteria | RETRIEVED; acceptance not declared |
 
 **What S1 does not say** (verified by reading all 19 pages): which equity
 (opening, current, NLV, cash) defines R or "account"; at what instant it is
@@ -75,27 +70,28 @@ requirement; any broker/account binding requirement.
 | Parameter | S1 range | Code value | Relationship | Selecting authority |
 |---|---|---|---|---|
 | Daily loss limit | −3R | −3R | equal | S1 |
-| Weekly loss limit | −6R to −8R | −6R (`-8R` and every other value rejected) | **inside the range at the strict end** | OWNER (O-2); approval record unretrieved |
-| Total heat | 4–5R | 4R | strict end | OWNER/NONE (O-6) |
-| Correlated heat | 2–2.5R | 2R | strict end | OWNER/NONE |
-| Theme concentration | ~15–20% | 15% | strict end | OWNER/NONE |
+| Weekly loss limit | −6R to −8R | −6R (`-8R` and every other value rejected) | **inside the range at the strict end** | S3c current accepted requirement (approval chronology not exposed) |
+| Total heat | 4–5R | 4R | strict end | S3d approval dated 2026-10-16 |
+| Correlated heat | 2–2.5R | 2R | strict end | S3d approval dated 2026-10-16 |
+| Theme concentration | ~15–20% | 15% | strict end | S3d approval dated 2026-10-16 |
 | Sizing risk fraction | 0.25–0.5% (unproven stage) | accepts 0.25–0.5% only | equal to the stage-1 band | S1 P-1 |
 | R unit | per-trade risk (varies by stage) | fixed 0.5% of equity | see C-5 | OWNER (O-1) |
 
 ## 4. Conflicts and discrepancies
 
-No documented approval-precedence rule is retrievable (S3 inaccessible), so none
-is applied and **no value is silently chosen**; each item states the finding and
-what is needed.
+No global approval-precedence rule is documented in the retrieved snapshots.
+Explicit approved configuration selects endpoints within the original ranges;
+no value is chosen from implementation alone.
 
 | # | Finding | Status |
 |---|---|---|
-| C-1 | **Weekly limit**: S1 permits −6R…−8R; owner-stated and code = −6R. Per the owner's ATS-009E task text, Layer 3 previously carried −8R and was aligned to −6R. The −6R value is **not in conflict with S1** (it is an allowed endpoint); the conflict is only that S1 leaves the choice open and the approval that selects −6R is unretrieved. | **CONSISTENT, APPROVAL RECORD UNRETRIEVED.** Code remains −6R (conservative). Confirm against S3. |
-| C-2 | Heat/theme caps (4R, 2R, 15%) are the strict ends of S1's ranges (4–5R, 2–2.5R, 15–20%). Not conflicts; endpoint selection has no accessible approval source. | **UNRETRIEVED APPROVAL**; code remains strict. |
+| C-1 | Weekly −6R is within S1’s −6R…−8R range and is explicitly selected in [ATS-009 Acceptance Criteria](https://app.notion.com/p/3f08afe6392181228e02ecd6539bff6f). Snapshot as of 2026-10-23T04:00:00.705Z; historical approval date unavailable. −8R is not a current ATS-009 alternative. | **APPROVED / RECORDED CURRENT REQUIREMENT; D-4 CLOSED.** |
+| C-2 | Heat/theme endpoints 4R, 2R and 15%, with reference R=0.5% validated equity, are explicitly approved in [Sprint 3](https://app.notion.com/p/3f08afe6392181f78830e2540634e2d3), “Portfolio risk policy approved”, **2026-10-16**. They lie within S1’s ranges. | **APPROVED; D-4 CLOSED.** |
 | C-3 | "Daily −3R" is identical in S1, S4 and code. | No conflict. |
 | C-4 | S1 defines R as the risk taken on a trade, which changes with evidence stage (P-1); the owner policy fixes 1R at 0.5% of opening equity (O-1). Today sizing is capped at 0.5% so the fixed unit is the conservative upper bound (a 0.25% trade is 0.5R of heat). If a future stage allows 0.5–1% risk per trade, a single trade could exceed 1R under the fixed unit. | **FLAG for when risk-per-trade exceeds 0.5%**; not reachable in current code. |
-| C-5 | Equity basis is unspecified in S1 and **differs by purpose in code** (§5). | **OPEN — owner decisions D-1…D-4.** |
+| C-5 | Equity basis is unspecified in S1 and **differs by purpose in code** (§5). | **OPEN — narrowed decisions D-1…D-3; D-4 closed.** |
 | C-6 | Heat check enforces "add the new trade's R to both totals" as dollar risk ÷ (current equity × 0.5%); S1 states it in R units of the trade. Equivalent only while sizing risk = 0.5%. | Informational. |
+
 
 ## 5. Equity-basis resolution
 
@@ -114,9 +110,9 @@ current-equity basis shrinks the heat R-unit while the lock R-unit stays fixed;
 after a deposit, heat and theme limits rise immediately while the lock basis does
 not move until the next period.
 
-**Resolution status: partly resolved by S4, otherwise FLAGGED.**
+**Resolution status: partly resolved by S3/S4; precise metric and timestamps remain open.**
 - Locks: frozen separate daily/weekly opening equity — **specified (O-1)**; keep.
-- Sizing, heat, theme: **no accessible requirement.** Options for the owner
+- Sizing, heat, theme: S3d specifies **validated account equity**, reference 0.5% R and account-equity concentration. Exact metric/as-of and snapshot coupling remain undefined. Historical options for review
   (none applied here):
   - **A** — current authenticated NLV from one snapshot (one `snapshot_id`) for sizing, heat and theme (matches S1's "account" example and current code for heat).
   - **B** — conservative: `min(current NLV, daily opening equity)` for heat/theme limits, so gains and deposits cannot loosen caps intraday.
@@ -125,13 +121,14 @@ not move until the next period.
   the control that must not loosen mid-session; this is a recommendation, not a
   decision.
 
-**Owner decisions required (S3 could not be read):**
-- **D-1** Which equity basis defines 1R for position sizing (A/B/C above)?
-- **D-2** Basis for total/correlated heat caps?
-- **D-3** Basis for theme concentration (the S1 text says "account")?
-- **D-4** Confirm in the Notion backlog the selected endpoints −6R weekly, 4R, 2R and 15%, and whether weekly −8R is rejected by an approved amendment (O-2) or by owner preference.
-- **D-5** Provide ATS-008/ATS-009/Sprint 3 text (Notion export or access) and the approval-precedence rule.
-- **D-6** Approve the opening-capture window and maximum valuation age (§7.1); neither has a source value today.
+**Decision status after Notion retrieval:**
+- **D-1 — PARTLY RESOLVED:** reference R is 0.5% of validated account equity. Specify which metric (e.g. NLV) and as-of timestamp feeds sizing; no A/B/C choice approved here.
+- **D-2 — PARTLY RESOLVED:** total/correlated caps are approved at 4R/2R against validated account equity. Specify metric, snapshot coupling, and intraday flow treatment. Current versus frozen/min basis is still undecided.
+- **D-3 — PARTLY RESOLVED:** gross theme concentration is approved at 15% of account equity. Specify the metric and timestamp; no formula change approved here.
+- **D-4 — CLOSED:** selected 0.5%/4R/2R/15% configuration recorded in S3d on 2026-10-16; −3R/−6R inclusive sticky requirements recorded in current S3c. Historical approval date for S3c is not exposed. No repeated endpoint approval requested.
+- **D-5 — ACCESS RESOLVED:** Notion sources retrieved by Work; no owner export needed. A universal approval-precedence rule remains undocumented and is not invented.
+- **D-6 — OPEN:** opening boundary/timing tolerance, capture-window duration and maximum valuation age require explicit policy values.
+- **Opening corrections — OPEN:** define restatement approval/versioning and lock preservation before implementing opening corrections. Section 7’s design is proposed only.
 
 ## 6. Traceability matrix
 
@@ -146,19 +143,19 @@ documentation-only).
 | P-1 risk band | S1 p.3 | bounds 0.0025–0.005 in `size_long_equity_position` | `test_risk.py` sizing cases | Stage promotion (>0.5%) not implemented (by design); evidence-stage gating not traced | PARTIAL |
 | P-6 regime multiplier | S1 p.8 | `risk.py` regime handling | `test_regime_four_explicit_multiplier`, `test_regime_four_requires_multiplier_and_rejects_invalid_multiplier`, `test_regime_five_always_denies_without_executable_quantity` | Regime classification source out of scope | PASS (SIM) |
 | P-3 daily −3R | S1 p.3/10/18, O-2 | `ats009_accounting`, `layer3.LossLockState` (−3R enforced, others rejected) | `test_daily_limit_other_than_minus_three_is_rejected`, `test_f6_daily_minus_3r_inclusive_boundary_locks_daily_only` (PG) | Opening equity not broker-captured | PARTIAL |
-| P-3 weekly −6R…−8R | S1 p.3, O-2 | −6R only | `test_weekly_limit_other_than_minus_six_is_rejected` (−5/−7/−8/−6.0001/−5.9999), `test_f6_weekly_minus_6r_inclusive_boundary_locks_weekly_only`, `test_f6_weekly_just_inside_limit_does_not_lock` (PG) | C-1: approval record unretrieved | PARTIAL |
+| P-3 weekly −6R…−8R | S1 p.3, O-2 | −6R only | `test_weekly_limit_other_than_minus_six_is_rejected` (−5/−7/−8/−6.0001/−5.9999), `test_f6_weekly_minus_6r_inclusive_boundary_locks_weekly_only`, `test_f6_weekly_just_inside_limit_does_not_lock` (PG) | C-1 resolved by S3c; broker opening/capture still missing | PARTIAL |
 | P-3 "return fresh" / O-3 sticky | S1, O-3 | sticky projection; reset only by valid period | `test_f6_lock_survives_nlv_recovery_and_service_recreation`, `test_f6_next_session_clears_daily_lock_but_weekly_lock_persists`, `test_f6_new_week_uses_separate_frozen_openings_and_clears_prior_locks`, `test_postgres_loss_state_threshold_and_sticky_lock_survive_recovery`, `test_postgres_daily_rollover_preserves_weekly_lock_and_week_requires_opening` | S1 does not define "fresh" (period vs review); reset semantics are owner-stated only | PARTIAL |
 | O-1 frozen R unit | S4 | `PeriodOpeningEquity`, `evaluate_loss_accounting` | `test_daily_and_weekly_use_independent_frozen_equity_denominators`, `test_invalid_opening_equity_rejected` | **No component captures/freezes an opening at a boundary** (§7) | PARTIAL |
 | O-4 flows | S4 | `ReconciledExternalFlow`, flow-adjusted P&L | `test_cash_flows_are_signed_and_period_scoped`, `test_f6_flows_excluded_from_pnl_and_fees_included` (PG) | Flow signs/categories on real broker data UNVERIFIED | PARTIAL |
 | O-5 missing/stale evidence | S4 | `LossAccountingEvaluation` unavailable reasons; Layer 3 denies | `test_f6_stale_valuation_is_unavailable_and_creates_no_state`, `test_f6_stale_opening_period_is_unavailable`, `test_f6_missing_daily_opening_evidence_yields_no_lock_state`, `test_f6_layer3_denies_when_no_ledger_loss_state_exists`, `test_f6_incomplete_flow_reconciliation_is_unavailable` | Freshness limit is a caller parameter; no policy value | PARTIAL |
-| P-4 total heat | S1 p.3, O-6 | `portfolio.assess_portfolio_risk` (`Fraction` math, 4R) | `test_total_heat_resizes_to_the_exact_largest_whole_share_quantity`, `test_external_pending_orders_consume_risk_and_theme_capacity` | Basis D-2; 4R vs 4–5R endpoint (C-2); snapshot flags caller-asserted | PARTIAL |
-| P-4 correlated heat | S1 p.3/4 | factor-keyed heat, 2R | `test_correlated_heat_is_counted_across_different_named_themes`, `test_multiple_correlated_factors_each_apply_their_own_heat_limit` | Endpoint 2R vs 2–2.5R; factor taxonomy is test data | PARTIAL |
-| P-5 theme concentration | S1 p.4, O-6 | gross notional ≤ 15% × equity | `test_theme_concentration_limits_gross_notional_separately_from_heat`, `test_candidate_reaching_theme_cap_exactly_is_allowed`, `test_candidate_above_theme_cap_is_resized_to_boundary`, `test_over_cap_theme_denies_candidate_in_a_different_theme` | Basis D-3; 15% vs 15–20% | PARTIAL |
+| P-4 total heat | S1 p.3, O-6 | `portfolio.assess_portfolio_risk` (`Fraction` math, 4R) | `test_total_heat_resizes_to_the_exact_largest_whole_share_quantity`, `test_external_pending_orders_consume_risk_and_theme_capacity` | Basis D-2; endpoint approval retrieved (C-2); snapshot flags caller-asserted | PARTIAL |
+| P-4 correlated heat | S1 p.3/4 | factor-keyed heat, 2R | `test_correlated_heat_is_counted_across_different_named_themes`, `test_multiple_correlated_factors_each_apply_their_own_heat_limit` | Endpoint 2R approved by S3d; factor taxonomy is test data | PARTIAL |
+| P-5 theme concentration | S1 p.4, O-6 | gross notional ≤ 15% × equity | `test_theme_concentration_limits_gross_notional_separately_from_heat`, `test_candidate_reaching_theme_cap_exactly_is_allowed`, `test_candidate_above_theme_cap_is_resized_to_boundary`, `test_over_cap_theme_denies_candidate_in_a_different_theme` | Basis D-3; 15% endpoint approved by S3d | PARTIAL |
 | Stale/incomplete portfolio | O-5 | `PORTFOLIO_STATE_STALE/INCOMPLETE`, policy-not-configured denies | `test_stale_incomplete_and_unclassified_snapshots_are_denied` | `snapshot_max_age` has no default value | PARTIAL |
 | Replay/version binding | O-3 | `_loss_binding_is_current` | `test_reservation_binds_loss_state_and_stale_replay_is_denied`, `test_postgres_layer3_binds_loss_state_version_and_denies_stale_replay` | — | PASS (SIM/PG) |
 | Replay/conflict/rollback/retry | O-5 | `LossStateRepository`, bounded retries | `test_f6_duplicate_replay_creates_no_duplicate_state_or_evidence`, `test_f6_conflicting_identities_fail_closed_and_roll_back`, `test_f6_transient_failure_after_writes_retries_with_same_request_identity`, `test_f6_retry_exhaustion_fails_closed_without_partial_records` | — | PASS (SIM/PG) |
 | O-7 disabled | S4 | `Literal[False]`, static scans, CI `--fail-on-skip` | `tests/test_layer3_execution_invariant.py`, `tests/test_execution_capability_guard.py`, `tests/test_ci_workflow_guards.py` | Python-level guard, not a security boundary (F8) | PASS (guard); not a trading approval |
-| A-8 / A-9 / A-S3 | S3 | — | — | **SOURCE-UNRETRIEVED** | BLOCKED |
+| A-8 / A-9 / A-S3 | S3b/S3c/S3d | Existing components above | Named tests above; source mappings §10.2 | Source retrieval complete; metric/timing, broker authority and full acceptance still open | PARTIAL |
 
 ## 7. Minimum opening-equity capture contract
 
@@ -214,13 +211,13 @@ unimplemented.
 ## 8. Evidence classes and limits of this document
 
 - Playbook requirements are read from an extracted copy of the owner's PDF; the PDF is not committed. The SHA-256 above identifies the version read.
-- Owner-stated rows (S4) are chat statements; they are not independently verifiable and have not been reconciled to Notion.
+- Owner-stated rows are now reconciled to S3 where supported; detail beyond the retrieved sources remains explicitly owner-stated/proposed.
 - All test evidence is SIM/PG from F7 (648 passed, 0 skipped on disposable PostgreSQL at `d18070a`) and F8 (702 passed, 0 skipped with database; 630 passed / 72 skipped without). This document re-ran no tests; it changes no code. Coding-agent results are not independent review.
 - Broker guarantees remain UNVERIFIED: account binding, timestamps/timezone, ordering, history completeness, flow signs/categories, reversal linkage, opening equity, reconciliation.
 
 ## 9. Recommended next steps
 
-1. Owner provides S3 access/export (D-5) and answers D-1…D-6; update this snapshot with source version/date and mark each amendment's approval.
+1. Source retrieval and D-4 endpoint selection are complete. Resolve only precise equity metric/as-of/coupling, opening timing/freshness (D-6), and correction rules; source-linked options may be drafted without changing policy.
 2. Then implement §7.4 (simulation opening-capture) as the next bounded task.
 3. Only after D-1…D-3 are decided: add a single-snapshot equity-basis contract and tests; no thresholds change before approval.
 4. Broker-backed capture remains blocked on the §7.3 items.
@@ -255,7 +252,7 @@ the broader loss/heat/concentration ranges. No policy code changed.
 | ATS-007 standalone sizing | N7 worked-example acceptance, S1 risk hierarchy | `risk.py`, sizing/regime tests cited §6 | Source and timestamp/convention for sizing equity at integrated gate still need a precise requirement. Standalone arithmetic acceptance is not source authentication. |
 | Sprint 3 exit | NS3 current properties, safety conditions in NS3/N9 | Existing suite covers synthetic sizing/multiplier/heat/locks/allow-resize-deny; F8 guards | Traceability is now available, but source-authority and integrated gate acceptance still incomplete. Do not mark Sprint 3 Complete. |
 
-### 10.3 Remaining decisions only
+### 10.3 Remaining decisions only (consistent with the revised main tables)
 
 - D-1/D-2/D-3 narrowed: NS3 already specifies validated account equity and
   account-equity concentration. The exact metric (NLV versus other equity),
