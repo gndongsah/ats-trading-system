@@ -18,6 +18,7 @@ from collections.abc import Callable, Mapping
 from decimal import Decimal
 from typing import Any
 
+from src.cash_history_comparison import comparison_windows, summarize_protocol
 from src.webull_sandbox_cash_activities import (
     OfficialSdkCashActivitiesGateway,
     WebullSandboxCashActivitiesAdapter,
@@ -314,6 +315,8 @@ def run(
     paper_identifier_input: Callable[[], str] | None = None,
     start_time: str | None = None,
     end_time: str | None = None,
+    overlap_start_time: str | None = None,
+    enclosing_end_time: str | None = None,
     expected_nlv_input: Callable[[], str] | None = None,
     expected_cash_input: Callable[[], str] | None = None,
     expected_deposit_input: Callable[[], str] | None = None,
@@ -326,6 +329,9 @@ def run(
     # Validate every operator input before credentials or the network are used.
     try:
         window = _validate_query_window(start_time, end_time)
+        protocol = comparison_windows(
+            start_time, end_time, overlap_start_time, enclosing_end_time
+        )
     except ValueError as error:
         print("result: BLOCKED")
         print("input_error: INVALID_QUERY_WINDOW")
@@ -343,6 +349,7 @@ def run(
         return 2
     strict_cash = window != (None, None) or expected_deposit_input is not None
     cash_summary: dict | None = None
+    comparison_summary = None
     nlv_status = cash_status = "NOT_REQUESTED"
     try:
         credentials = load_sandbox_credentials(
@@ -410,6 +417,19 @@ def run(
                 cash_summary = summarize_cash_history(history, expected_deposit)
                 cash_complete = history.pagination_complete
                 cash_stop_reason = "TERMINAL_CURSOR"
+                if protocol is not None:
+                    histories = [history]
+                    for query_start, query_end in protocol[1:]:
+                        histories.append(
+                            WebullSandboxCashActivitiesAdapter(
+                                cash_gateway,
+                                selected_account_id=selected.account_id,
+                                start_time=query_start,
+                                end_time=query_end,
+                                max_pages=_MAX_PAGES,
+                            ).fetch_history()
+                        )
+                    comparison_summary = summarize_protocol(histories)
             for _ in range(0 if strict_cash else _MAX_PAGES):
                 response = cash_gateway.list_cash_activities(
                     selected.account_id,
@@ -433,6 +453,7 @@ def run(
                 if not strict_cash:
                     cash_stop_reason = "PAGE_LIMIT"
     except WebullReadOnlyError as error:
+        cash_complete = False
         cash_stop_reason = type(error).__name__
         print("request_result: FAIL")
         print("error_type:", type(error).__name__)
@@ -449,6 +470,7 @@ def run(
             print("operation:", error.operation)
             print("http_status:", error.status_code)
     except Exception as error:  # noqa: BLE001 - only the exception type is emitted.
+        cash_complete = False
         cash_stop_reason = type(error).__name__
         print("request_result: FAIL")
         print("error_type:", type(error).__name__)
@@ -477,6 +499,8 @@ def run(
     if cash_gateway is not None:
         for index, page in enumerate(cash_gateway.pages, start=1):
             print(f"cash_activities_page_{index}:", page)
+    if protocol is not None:
+        print("cash_history_comparison:", comparison_summary or "NOT_COMPLETED")
     print("cash_activities_pages:", len(cash_gateway.pages) if cash_gateway else 0)
     print("cash_query_window:", window if window != (None, None) else "DEFAULT_OMITTED")
     print("balance_nlv_comparison:", nlv_status)
@@ -521,6 +545,12 @@ def main() -> int:
         action="store_true",
         help="hidden prompt for an expected deposit amount",
     )
+    parser.add_argument(
+        "--overlap-start-time", help="enables private four-run comparison"
+    )
+    parser.add_argument(
+        "--enclosing-end-time", help="end of enclosing comparison window"
+    )
     args = parser.parse_args()
 
     def hidden(label: str) -> Callable[[], str]:
@@ -532,6 +562,8 @@ def main() -> int:
         )
         if args.map_paper_account
         else None,
+        overlap_start_time=args.overlap_start_time,
+        enclosing_end_time=args.enclosing_end_time,
         start_time=args.start_time,
         end_time=args.end_time,
         expected_nlv_input=hidden("Expected desktop NLV")
