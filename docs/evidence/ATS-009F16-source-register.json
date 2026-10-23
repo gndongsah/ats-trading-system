@@ -1,0 +1,108 @@
+{
+  "retrieval_method": "HTTPS GET of official Markdown variants; parsed first OpenAPI JSON fence. Search-rendered HTML omits some schemas.",
+  "raw_source_retained_in_repository": false,
+  "sources": [
+    {
+      "source_url": "https://developer.webull.com/apis/docs/reference/trade-cash-activity-by-type.md",
+      "retrieved_on": "2026-10-23",
+      "date_timezone": "America/Chicago",
+      "raw_markdown_sha256": "0172e7f8b93f102e2f87f1141d4371354504383adad66c66f4066a98f45b1e56",
+      "raw_markdown_bytes": 24725,
+      "operation_id": "tradeCashActivityByType",
+      "method": "GET",
+      "path": "/trading/activities/cash-activities/list",
+      "query_parameter_names": [
+        "account_id",
+        "activity_types",
+        "start_time",
+        "end_time",
+        "pagination_key"
+      ],
+      "response_schema_pointer": "/responses/200/content/application~1json/schema",
+      "top_level_response_type": "object",
+      "top_level_response_fields": [
+        "data",
+        "pagination_key"
+      ],
+      "interpretation": "Documentation evidence only; not an authenticated response or completeness attestation."
+    },
+    {
+      "source_url": "https://developer.webull.com/apis/docs/reference/account-balance.md",
+      "retrieved_on": "2026-10-23",
+      "date_timezone": "America/Chicago",
+      "raw_markdown_sha256": "4301fc785f7eb824bcc5d301bc982fb1d9379ddbf73c54d96a1054a3c9345a68",
+      "raw_markdown_bytes": 19901,
+      "operation_id": "accountBalance",
+      "method": "GET",
+      "path": "/trading/assets/balances/get",
+      "query_parameter_names": [
+        "account_id"
+      ],
+      "response_schema_pointer": "/responses/200/content/application~1json/schema",
+      "top_level_response_type": "object",
+      "top_level_response_fields": [
+        "total_asset_currency",
+        "total_cash_balance",
+        "total_market_value",
+        "total_unrealized_profit_loss",
+        "total_net_liquidation_value",
+        "total_day_profit_loss",
+        "day_trades_left",
+        "maintenance_margin",
+        "open_margin_calls",
+        "used_margin",
+        "used_margin_for_open_order",
+        "init_margin",
+        "intraday_margin",
+        "margin_excess",
+        "margin_ratio",
+        "account_currency_assets"
+      ],
+      "interpretation": "Documentation evidence only; not an authenticated response or completeness attestation."
+    },
+    {
+      "source_url": "https://developer.webull.com/apis/docs/reference/account-position.md",
+      "retrieved_on": "2026-10-23",
+      "date_timezone": "America/Chicago",
+      "raw_markdown_sha256": "15c670cabbde2cd565dc62d13ef0bc799c28c0fbbd247c7b310b9a269bdfdc4f",
+      "raw_markdown_bytes": 16129,
+      "operation_id": "accountPosition",
+      "method": "GET",
+      "path": "/trading/assets/positions/list",
+      "query_parameter_names": [
+        "account_id"
+      ],
+      "response_schema_pointer": "/responses/200/content/application~1json/schema",
+      "top_level_response_type": "array",
+      "top_level_response_fields": [],
+      "interpretation": "Documentation evidence only; not an authenticated response or completeness attestation."
+    },
+    {
+      "source_url": "https://developer.webull.com/apis/docs/reference/list-transfer-activities.md",
+      "retrieved_on": "2026-10-23",
+      "date_timezone": "America/Chicago",
+      "raw_markdown_sha256": "738b667a58a30fcb5bb6d7a24e48ac72e72df982a8affb8657d2d817dc1d43d5",
+      "raw_markdown_bytes": 19616,
+      "operation_id": "listTransferActivities",
+      "method": "GET",
+      "path": "/trading/activities/transfer-activities/list",
+      "query_parameter_names": [
+        "account_id",
+        "transfer_method",
+        "direction",
+        "status",
+        "acats_transfer_types",
+        "start_time",
+        "end_time",
+        "pagination_key"
+      ],
+      "response_schema_pointer": "/responses/200/content/application~1json/schema",
+      "top_level_response_type": "object",
+      "top_level_response_fields": [
+        "data",
+        "pagination_key"
+      ],
+      "interpretation": "Documentation evidence only; not an authenticated response or completeness attestation."
+    }
+  ]
+}
