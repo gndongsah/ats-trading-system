@@ -50,6 +50,7 @@ BROKER_EXECUTION_ENABLED = False
 
 class Layer3Reason(StrEnum):
     RESERVED = "RESERVED"
+    AUTHORIZATION_EVIDENCE_STALE = "AUTHORIZATION_EVIDENCE_STALE"
     PRINCIPAL_UNAVAILABLE = "PRINCIPAL_UNAVAILABLE"
     SNAPSHOT_SOURCE_UNAVAILABLE = "SNAPSHOT_SOURCE_UNAVAILABLE"
     BROKER_EVENT_SOURCE_UNAVAILABLE = "BROKER_EVENT_SOURCE_UNAVAILABLE"
@@ -471,9 +472,9 @@ class Layer3AuthorizationService:
         idempotency_key = idempotency_key.strip()
         if not idempotency_key or len(idempotency_key) > 120:
             raise ValueError("idempotency_key must contain 1 to 120 characters")
+        self._lock_account(session, account_id)
         now = self._clock()
         self._require_utc(now)
-        self._lock_account(session, account_id)
 
         prior = session.scalar(
             select(RiskReservationEventRecord).where(
@@ -512,6 +513,23 @@ class Layer3AuthorizationService:
                 session, account_id, now, prior.event_data
             ):
                 return self._deny(Layer3Reason.LOSS_STATE_VERSION_CONFLICT)
+            replay_snapshot_record = session.scalar(
+                select(PortfolioSnapshotRecord)
+                .where(PortfolioSnapshotRecord.account_id == account_id)
+                .order_by(PortfolioSnapshotRecord.version.desc())
+                .limit(1)
+            )
+            replay_snapshot = PortfolioSnapshot.model_validate(
+                replay_snapshot_record.snapshot_data
+            )
+            replay_state = self._read_loss_state(session, account_id, now)
+            if (
+                self._snapshot_verifier.verify_snapshot(replay_snapshot, principal)
+                != replay_snapshot
+                or replay_state is None
+                or not self._final_evidence_is_fresh(replay_snapshot, replay_state, now)
+            ):
+                return self._deny(Layer3Reason.AUTHORIZATION_EVIDENCE_STALE)
             return Layer3Decision.model_validate(
                 prior.event_data["decision"]
             ).model_copy(update={"replayed": True, "execution_enabled": False})
@@ -599,7 +617,7 @@ class Layer3AuthorizationService:
                     return self._deny(Layer3Reason.PLAN_ALREADY_RESERVED)
                 exposures.append(exposure)
 
-        requested_quantity = self._sized_quantity(plan, snapshot)
+        requested_quantity = self._sized_quantity(plan, snapshot, tuple(exposures))
         if requested_quantity <= 0:
             return self._deny(Layer3Reason.PORTFOLIO_RISK_DENIED)
         result = assess_portfolio_risk(
@@ -651,6 +669,8 @@ class Layer3AuthorizationService:
             session, account_id, now, {"loss_state": loss_binding}
         ):
             return self._deny(Layer3Reason.LOSS_STATE_VERSION_CONFLICT)
+        if not self._final_evidence_is_fresh(snapshot, loss_state, now):
+            return self._deny(Layer3Reason.AUTHORIZATION_EVIDENCE_STALE)
         self._append_event(
             session,
             state=state,
@@ -665,7 +685,33 @@ class Layer3AuthorizationService:
         )
         return decision
 
-    def _sized_quantity(self, plan: TradePlan, snapshot: PortfolioSnapshot) -> int:
+    def _final_evidence_is_fresh(
+        self,
+        snapshot: PortfolioSnapshot,
+        loss_state: LossLockState,
+        started_at: datetime,
+    ) -> bool:
+        """Check actual final decision time, including time spent in providers."""
+        at = self._clock()
+        self._require_utc(at)
+        maximum = self._policy.snapshot_max_age
+        return (
+            at >= started_at
+            and maximum is not None
+            and timedelta(0) <= at - snapshot.as_of <= maximum
+            and timedelta(0) <= at - loss_state.as_of <= maximum
+            and self._risk_time_is_eligible(at)
+        )
+
+    def _risk_time_is_eligible(self, at: datetime) -> bool:
+        return True  # runtime-specific session authority belongs to its adapter
+
+    def _sized_quantity(
+        self,
+        plan: TradePlan,
+        snapshot: PortfolioSnapshot,
+        reservations: tuple[ReservationExposure, ...],
+    ) -> int:
         """Default preserves existing externally sized plans."""
         return int(plan.quantity)
 
