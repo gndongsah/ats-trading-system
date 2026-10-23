@@ -7,6 +7,8 @@ Only account-list, balance, positions, and cash-activity reads are exposed.
 
 from __future__ import annotations
 
+import argparse
+import getpass
 import os
 import re
 import shutil
@@ -208,6 +210,26 @@ def _choose(choices: tuple[Any, ...], input_fn: Callable[[str], str], isatty: bo
     return choices[int(answer) - 1]
 
 
+def paper_identifier_match(body: object, selected_id: str, identifier: str) -> str:
+    """Compare exact identifiers only; suffixes and labels cannot prove binding."""
+    if not identifier or identifier != identifier.strip():
+        return "INVALID_IDENTIFIER"
+    entries = body.get("data") if isinstance(body, Mapping) else body
+    if not isinstance(entries, list):
+        return "UNSUPPORTED_RESPONSE"
+    matches = [
+        row
+        for row in entries
+        if isinstance(row, Mapping)
+        and any(row.get(key) == identifier for key in ("account_id", "account_number"))
+    ]
+    if len(matches) != 1:
+        return "NO_UNIQUE_EXACT_MATCH"
+    if matches[0].get("account_id") != selected_id:
+        return "MATCHES_DIFFERENT_API_ACCOUNT"
+    return "EXACT_IDENTIFIER_MATCH_OBSERVED"
+
+
 def _print_shapes(
     statuses: Mapping[str, int | str], shapes: Mapping[str, object]
 ) -> None:
@@ -224,6 +246,7 @@ def run(
     isatty: bool | None = None,
     build_trade_client: Callable[[str, str], Any] | None = None,
     keyring_module: Any | None = None,
+    paper_identifier_input: Callable[[], str] | None = None,
 ) -> int:
     environ = os.environ if environ is None else environ
     isatty = sys.stdin is not None and sys.stdin.isatty() if isatty is None else isatty
@@ -251,6 +274,7 @@ def run(
     cash_gateway: _CapturingCashGateway | None = None
     selected = None
     snapshot = None
+    mapping_status = "NOT_REQUESTED"
     cash_complete = False
     cash_stop_reason = "NOT_STARTED"
     try:
@@ -261,6 +285,14 @@ def run(
         if selected is None:
             cash_stop_reason = "ACCOUNT_NOT_SELECTED"
         else:
+            if paper_identifier_input is not None:
+                mapping_status = paper_identifier_match(
+                    _json_body(account_gateway.get_account_list(), "account list"),
+                    selected.account_id,
+                    paper_identifier_input(),
+                )
+                if mapping_status != "EXACT_IDENTIFIER_MATCH_OBSERVED":
+                    raise MalformedResponse("paper identifier comparison failed")
             snapshot = WebullSandboxReadOnlyAdapter(
                 account_gateway,
                 selected_account_id=selected.account_id,
@@ -317,6 +349,7 @@ def run(
         os.chdir(previous_cwd)
         shutil.rmtree(scratch)
 
+    print("paper_account_identifier_comparison:", mapping_status)
     print("credential_source:", source_label)
     print("sandbox_host: api.sandbox.webull.com")
     print("sdk_files_written_to_scratch:", leftovers)
@@ -358,7 +391,16 @@ def run(
 
 
 def main() -> int:
-    return run()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--map-paper-account", action="store_true")
+    args = parser.parse_args()
+    return run(
+        paper_identifier_input=(
+            lambda: getpass.getpass("Desktop paper account identifier (hidden): ")
+        )
+        if args.map_paper_account
+        else None
+    )
 
 
 if __name__ == "__main__":
