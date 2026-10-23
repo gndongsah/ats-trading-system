@@ -208,44 +208,62 @@ migrated_postgres_engine = pg.migrated_postgres_engine
 
 
 def test_reviewer_static_buying_power_reused(migrated_postgres_engine):
-    ctx = f12.setup(migrated_postgres_engine, buying_power='500')
+    ctx = f12.setup(migrated_postgres_engine, buying_power="500")
     factory, service, first_id, *_ = ctx
     entry = pg.make_complete_trade()
-    plan = entry.plan.model_copy(update={
-        'account_id': service.snapshot.account_id,
-        'quantity': Decimal(50),
-        'score_snapshot': entry.plan.score_snapshot.model_copy(update={'regime': Regime.RISK_ON, 'id': uuid4()}),
-        'risk_intent': RiskIntent(stop_risk_budget=Decimal(125)),
-    })
+    plan = entry.plan.model_copy(
+        update={
+            "account_id": service.snapshot.account_id,
+            "quantity": Decimal(50),
+            "score_snapshot": entry.plan.score_snapshot.model_copy(
+                update={"regime": Regime.RISK_ON, "id": uuid4()}
+            ),
+            "risk_intent": RiskIntent(stop_risk_budget=Decimal(125)),
+        }
+    )
     with factory.begin() as session:
-        pg.JournalRepository(session).save(entry.model_copy(update={'plan': plan}))
-    first = f12.reserve(ctx, 'review-bp-1')
-    second = service.authorize_with_retry(factory, plan_id=plan.id, idempotency_key='review-bp-2')
+        pg.JournalRepository(session).save(entry.model_copy(update={"plan": plan}))
+    first = f12.reserve(ctx, "review-bp-1")
+    second = service.authorize_with_retry(
+        factory, plan_id=plan.id, idempotency_key="review-bp-2"
+    )
     with factory() as session:
         rows = session.scalars(select(RiskReservationEventRecord)).all()
-        total = sum(Decimal(row.event_data['reservation']['entry']) * row.event_data['reservation']['remaining_quantity'] for row in rows)
-    print(f'BP={service.buying_power}; quantities={first.quantity},{second.quantity}; total reserved notional={total}; events={len(rows)}')
+        total = sum(
+            Decimal(row.event_data["reservation"]["entry"])
+            * row.event_data["reservation"]["remaining_quantity"]
+            for row in rows
+        )
+    print(
+        f"BP={service.buying_power}; quantities={first.quantity},{second.quantity}; total reserved notional={total}; events={len(rows)}"
+    )
     assert first.quantity == second.quantity == 4
-    assert total == Decimal('804.0') > service.buying_power
+    assert total == Decimal("804.0") > service.buying_power
     assert not first.execution_enabled and not second.execution_enabled
 
 
-def test_reviewer_clock_advance_during_final_check(migrated_postgres_engine, monkeypatch):
+def test_reviewer_clock_advance_during_final_check(
+    migrated_postgres_engine, monkeypatch
+):
     ctx = f12.setup(migrated_postgres_engine)
     factory, service, _, now, *_ = ctx
     original = service._loss_binding_is_current
+
     def delayed(session, account_id, at, event_data):
         now[0] += timedelta(seconds=31)
         return original(session, account_id, at, event_data)
-    monkeypatch.setattr(service, '_loss_binding_is_current', delayed)
-    result = f12.reserve(ctx, 'review-stale')
-    print(f'decision={result.decision}; quantity={result.quantity}; actual model age={now[0] - service.snapshot.as_of}; events={f12.count(factory)}')
+
+    monkeypatch.setattr(service, "_loss_binding_is_current", delayed)
+    result = f12.reserve(ctx, "review-stale")
+    print(
+        f"decision={result.decision}; quantity={result.quantity}; actual model age={now[0] - service.snapshot.as_of}; events={f12.count(factory)}"
+    )
     assert result.decision is not RiskDecision.DENY
     assert f12.count(factory) == 1
     assert not result.execution_enabled
     # An immediate fresh evaluation observes the expiration and denies replay.
-    monkeypatch.setattr(service, '_loss_binding_is_current', original)
-    replay = f12.reserve(ctx, 'review-stale')
+    monkeypatch.setattr(service, "_loss_binding_is_current", original)
+    replay = f12.reserve(ctx, "review-stale")
     assert replay.decision is RiskDecision.DENY
 ```
 
@@ -341,73 +359,149 @@ from decimal import Decimal
 from uuid import uuid4
 import pytest
 from src.domain.models import Regime
-from src.layer3 import BrokerOrderUpdate, BrokerOrderStatus, BrokerFillEvent, BrokerStopConfirmation
+from src.layer3 import (
+    BrokerOrderUpdate,
+    BrokerOrderStatus,
+    BrokerFillEvent,
+    BrokerStopConfirmation,
+)
 from src.portfolio import RiskDecision
 from src.simulation_ledger import SimulationLedger, SimulationEntry, EntryKind
 from tests import test_simulation_risk as f12
 from tests import test_simulation_risk_failure_verification as f14
 
-migrated_postgres_database=f12.migrated_postgres_database
-migrated_postgres_engine=f12.migrated_postgres_engine
+migrated_postgres_database = f12.migrated_postgres_database
+migrated_postgres_engine = f12.migrated_postgres_engine
+
 
 def second_plan(ctx):
-    entry=f12.pg.make_complete_trade()
-    plan=entry.plan.model_copy(update={'account_id':ctx[1].snapshot.account_id,'score_snapshot':entry.plan.score_snapshot.model_copy(update={'id':uuid4(),'regime':Regime.RISK_ON})})
+    entry = f12.pg.make_complete_trade()
+    plan = entry.plan.model_copy(
+        update={
+            "account_id": ctx[1].snapshot.account_id,
+            "score_snapshot": entry.plan.score_snapshot.model_copy(
+                update={"id": uuid4(), "regime": Regime.RISK_ON}
+            ),
+        }
+    )
     with ctx[0].begin() as session:
-        f12.pg.JournalRepository(session).save(entry.model_copy(update={'plan':plan}))
+        f12.pg.JournalRepository(session).save(entry.model_copy(update={"plan": plan}))
     return plan
 
-@pytest.mark.parametrize('replay',[False,True])
-@pytest.mark.parametrize('delay,allowed',[(0,True),(1,False)])
-def test_final_xnys_close(migrated_postgres_engine,monkeypatch,replay,delay,allowed):
-    ctx=f12.setup(migrated_postgres_engine)
-    factory,original,plan,now,*_=ctx
-    calendar=original._loss_locks.calendar
-    near=calendar.resolve(f12.f11.T).close_utc-timedelta(seconds=1)
-    book=SimulationLedger(account_id=original.snapshot.account_id,opened_at=f12.f11.T,opening_nlv='100000').append(SimulationEntry(event_id='later-tick',occurred_at=near,kind=EntryKind.PNL,amount='1'))
-    f12.f6.store(factory,book,near)
-    service=f14.adapter(original,original.snapshot.model_copy(update={'version':3,'as_of':near,'equity':Decimal(100001)}))
-    with factory.begin() as session: service.publish_snapshot(session,service.snapshot)
-    now[0]=near
-    if replay: assert service.authorize_with_retry(factory,plan_id=plan,idempotency_key='close').quantity>0
-    check=service._loss_binding_is_current
-    def delayed(*args,**kwargs):
-        result=check(*args,**kwargs)
-        now[0]+=timedelta(seconds=delay)
+
+@pytest.mark.parametrize("replay", [False, True])
+@pytest.mark.parametrize("delay,allowed", [(0, True), (1, False)])
+def test_final_xnys_close(
+    migrated_postgres_engine, monkeypatch, replay, delay, allowed
+):
+    ctx = f12.setup(migrated_postgres_engine)
+    factory, original, plan, now, *_ = ctx
+    calendar = original._loss_locks.calendar
+    near = calendar.resolve(f12.f11.T).close_utc - timedelta(seconds=1)
+    book = SimulationLedger(
+        account_id=original.snapshot.account_id,
+        opened_at=f12.f11.T,
+        opening_nlv="100000",
+    ).append(
+        SimulationEntry(
+            event_id="later-tick", occurred_at=near, kind=EntryKind.PNL, amount="1"
+        )
+    )
+    f12.f6.store(factory, book, near)
+    service = f14.adapter(
+        original,
+        original.snapshot.model_copy(
+            update={"version": 3, "as_of": near, "equity": Decimal(100001)}
+        ),
+    )
+    with factory.begin() as session:
+        service.publish_snapshot(session, service.snapshot)
+    now[0] = near
+    if replay:
+        assert (
+            service.authorize_with_retry(
+                factory, plan_id=plan, idempotency_key="close"
+            ).quantity
+            > 0
+        )
+    check = service._loss_binding_is_current
+
+    def delayed(*args, **kwargs):
+        result = check(*args, **kwargs)
+        now[0] += timedelta(seconds=delay)
         return result
-    monkeypatch.setattr(service,'_loss_binding_is_current',delayed)
-    result=service.authorize_with_retry(factory,plan_id=plan,idempotency_key='close')
-    print(f'close replay={replay} delay={delay} result={result.decision} age={(now[0]-near).total_seconds()}')
-    assert (result.decision is not RiskDecision.DENY)==allowed
-    assert f12.count(factory)==int(replay or allowed)
+
+    monkeypatch.setattr(service, "_loss_binding_is_current", delayed)
+    result = service.authorize_with_retry(
+        factory, plan_id=plan, idempotency_key="close"
+    )
+    print(
+        f"close replay={replay} delay={delay} result={result.decision} age={(now[0] - near).total_seconds()}"
+    )
+    assert (result.decision is not RiskDecision.DENY) == allowed
+    assert f12.count(factory) == int(replay or allowed)
     assert not result.execution_enabled
+
 
 def test_new_snapshot_keeps_active_affordability_charge(migrated_postgres_engine):
-    ctx=f12.setup(migrated_postgres_engine,buying_power='500')
-    assert f12.reserve(ctx).quantity==4
-    plan=second_plan(ctx)
-    service=f14.adapter(ctx[1],ctx[1].snapshot.model_copy(update={'version':3}))
-    with ctx[0].begin() as session: service.publish_snapshot(session,service.snapshot)
-    result=service.authorize_with_retry(ctx[0],plan_id=plan.id,idempotency_key='after-snapshot')
+    ctx = f12.setup(migrated_postgres_engine, buying_power="500")
+    assert f12.reserve(ctx).quantity == 4
+    plan = second_plan(ctx)
+    service = f14.adapter(ctx[1], ctx[1].snapshot.model_copy(update={"version": 3}))
+    with ctx[0].begin() as session:
+        service.publish_snapshot(session, service.snapshot)
+    result = service.authorize_with_retry(
+        ctx[0], plan_id=plan.id, idempotency_key="after-snapshot"
+    )
     assert result.decision is RiskDecision.DENY
-    assert f12.count(ctx[0])==1
+    assert f12.count(ctx[0]) == 1
+
 
 def test_cancel_releases_only_unfilled_charge(migrated_postgres_engine):
-    ctx=f12.setup(migrated_postgres_engine,buying_power='500')
-    first=f12.reserve(ctx)
-    service=ctx[1]
-    service._broker_event_verifier=f12.pg._PostgresBrokerEventVerifier()
+    ctx = f12.setup(migrated_postgres_engine, buying_power="500")
+    first = f12.reserve(ctx)
+    service = ctx[1]
+    service._broker_event_verifier = f12.pg._PostgresBrokerEventVerifier()
     with ctx[0].begin() as session:
-        state=service._reservation_state(session,service.snapshot.account_id,first.reservation_id)
-        update=BrokerOrderUpdate(event_id='review-fillcancel',account_id=state.account_id,order_attempt_id=state.order_attempt_id,broker_order_id='review-order',sequence=1,status=BrokerOrderStatus.CANCELLED,authorized_quantity=4,cumulative_filled_quantity=2,fills=(BrokerFillEvent(fill_id='review-fill',quantity=2,price=Decimal(101)),))
-        state=service.process_broker_order_update(session,reservation_id=first.reservation_id,event=update)
-        stop=BrokerStopConfirmation(event_id='review-stop',account_id=state.account_id,order_attempt_id=state.order_attempt_id,broker_order_id='review-order',sequence=2,covered_fill_ids=('review-fill',),active_stop=Decimal(98))
-        service.confirm_filled_stops(session,reservation_id=first.reservation_id,event=stop)
-    plan=second_plan(ctx)
-    result=service.authorize_with_retry(ctx[0],plan_id=plan.id,idempotency_key='after-fillcancel')
-    print(f'after partial fill/cancel newquantity={result.quantity}; fillednotional=202; total=403')
-    assert result.quantity==2
-    assert f12.count(ctx[0])==4
+        state = service._reservation_state(
+            session, service.snapshot.account_id, first.reservation_id
+        )
+        update = BrokerOrderUpdate(
+            event_id="review-fillcancel",
+            account_id=state.account_id,
+            order_attempt_id=state.order_attempt_id,
+            broker_order_id="review-order",
+            sequence=1,
+            status=BrokerOrderStatus.CANCELLED,
+            authorized_quantity=4,
+            cumulative_filled_quantity=2,
+            fills=(
+                BrokerFillEvent(fill_id="review-fill", quantity=2, price=Decimal(101)),
+            ),
+        )
+        state = service.process_broker_order_update(
+            session, reservation_id=first.reservation_id, event=update
+        )
+        stop = BrokerStopConfirmation(
+            event_id="review-stop",
+            account_id=state.account_id,
+            order_attempt_id=state.order_attempt_id,
+            broker_order_id="review-order",
+            sequence=2,
+            covered_fill_ids=("review-fill",),
+            active_stop=Decimal(98),
+        )
+        service.confirm_filled_stops(
+            session, reservation_id=first.reservation_id, event=stop
+        )
+    plan = second_plan(ctx)
+    result = service.authorize_with_retry(
+        ctx[0], plan_id=plan.id, idempotency_key="after-fillcancel"
+    )
+    print(
+        f"after partial fill/cancel newquantity={result.quantity}; fillednotional=202; total=403"
+    )
+    assert result.quantity == 2
+    assert f12.count(ctx[0]) == 4
     assert not result.execution_enabled
-
 ```
