@@ -11,7 +11,7 @@ from decimal import Decimal
 from enum import StrEnum
 from fractions import Fraction
 from hashlib import sha256
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 from uuid import UUID, uuid4
 
 from pydantic import (
@@ -325,15 +325,44 @@ class ReservationState(BaseModel):
         )
 
 
+def _require_execution_disabled(decision: "Layer3Decision") -> "Layer3Decision":
+    if decision.execution_enabled is not False:
+        raise ValueError("Layer 3 decisions can never enable broker execution")
+    return decision
+
+
 class Layer3Decision(BaseModel):
+    """Authorization result; execution is never enabled by this model.
+
+    ``Literal[False]`` rejects ``True`` on validation, ``model_validate`` and JSON
+    deserialization. ``model_copy`` and ``model_construct`` skip validation by
+    design, so both are overridden to re-check. This is a regression guard against
+    accidental misuse, not a security boundary: ``object.__setattr__``, direct
+    ``__dict__`` writes or subclassing can still forge a value in-process, which is
+    why the service re-checks every decision at its boundary and why
+    ``submit_order_to_broker`` independently refuses to run.
+    """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     decision: RiskDecision
     quantity: int
     reason: str
     reservation_id: UUID | None = None
-    execution_enabled: bool = False
+    execution_enabled: Literal[False] = False
     replayed: bool = False
+
+    @classmethod
+    def model_construct(cls, _fields_set=None, **values):  # type: ignore[override]
+        return _require_execution_disabled(
+            super().model_construct(_fields_set, **values)
+        )
+
+    def model_copy(self, *, update=None, deep: bool = False):  # type: ignore[override]
+        data = self.model_dump() | dict(update or {})
+        if data.get("execution_enabled") is not False:
+            raise ValueError("Layer 3 decisions can never enable broker execution")
+        return type(self).model_validate(data)
 
 
 class ExecutionDisabledError(RuntimeError):
@@ -606,6 +635,7 @@ class Layer3AuthorizationService:
             reason=result.reason.value,
             reservation_id=reservation_id,
         )
+        _require_execution_disabled(decision)
         if loss_binding is not None and not self._loss_binding_is_current(
             session, account_id, now, {"loss_state": loss_binding}
         ):

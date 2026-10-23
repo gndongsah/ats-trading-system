@@ -50,11 +50,11 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python -m pytest tests/test_postgres_persistence.py -q -rs | tee postgres-results.txt
+          python -m pytest tests/test_postgres_persistence.py -q -rs --fail-on-skip | tee postgres-results.txt
           if grep -Eq '[0-9]+ skipped|SKIPPED' postgres-results.txt; then
             echo "PostgreSQL tests were skipped"
             exit 1
           fi
 
       - name: Full test suite
-        run: python -m pytest -q -rs
+        run: python -m pytest -q -rs --fail-on-skip
