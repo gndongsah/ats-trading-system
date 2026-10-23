@@ -1,9 +1,30 @@
 # ATS-009F10 — equity and opening policy proposal
 
-**PROPOSED — NOT APPROVED. Documentation only.** No code, configuration,
-migration, threshold, enforcement flag or order path is changed. Approval of
-this proposal would specify future implementation; it would not authorize
-trading or establish broker-backed acceptance.
+**APPROVED POLICY FOR FUTURE IMPLEMENTATION — NOT TRADING ENABLEMENT.**
+Documentation only; no code, configuration, migration, enforcement flag or order
+path changed. Approval does not establish broker-backed readiness.
+
+## Owner approval record — 2026-10-22 America/Chicago
+
+The owner explicitly replied “I approve” after the F10 summary linked PR #13
+at `a6cfa0360aa1e5bed3f6101b66ea93d0d9fc034d` and listed the three recommended
+choices. This approves **option A for each of Decisions 1, 2 and 3**, as specified
+in that revision. Source: owner statement in the project conversation; no
+independent reviewer approval or broker attestation is implied.
+
+| Decision | Selected policy |
+|---|---|
+| 1 — equity | One validated current USD NLV snapshot for sizing, total/correlated heat and theme concentration; final reconciled flow treatment; separately frozen daily/weekly loss denominators. |
+| 2 — timing | Exact resolved XNYS opening source cutoff; observation lag ≤10s, completed capture ≤60s, current-source age ≤30s; reject future timestamps and missing/late evidence. Distinct daily/weekly facts and calendar authority requirements remain. |
+| 3 — corrections | Append correction evidence; preserve active opening denominators and existing sticky locks; deny affected-period new risk; no in-period denominator replacement in v0.1. |
+
+Alternative B/C options below were **not selected**. Proposal/recommendation
+wording in the design comparison is retained to explain the alternatives;
+this approval record determines the selected status. Timing values are owner
+policy choices, not Webull guarantees. The remaining work is implementation
+and independent verification under these constraints, not a repeat approval
+of the same choices. Schema/migration changes require separate design review.
+All broker trading, enforcement and paper/live submission remain disabled.
 
 Prepared 2026-10-22 America/Chicago. Base: `4ac9ea449446ba3ea3c17ae6e4530c3b234f6acb`.
 F9 dependency: [draft PR #12](https://github.com/gndongsah/ats-trading-system/pull/12),
@@ -20,9 +41,9 @@ on Sprint 3 directly and does not duplicate the still-open F9 document.
 | Playbook v3, October 2026, pages 3–4/19 | Risk hierarchy, sizing from stop distance, original heat/concentration/loss ranges. | SHA-256 `f9f632fc73b6eaa24f2304caa03c0fe7d29869e17c058da465f3fb8ee714cf26`, verified in F9. No precise equity timestamp or capture tolerance specified. |
 | Repository `src/ats009_calendar.py` / loss accounting | Existing XNYS calendar and separate opening facts inform compatibility. | Implementation evidence, not approval of the following choices. |
 
-Only the three numbered decisions at the end are requested. Existing limits
-above do not require reapproval. Every timing number below is an engineering
-proposal for review, not a Webull service guarantee. No universal precedence
+The three decisions were approved as option A in the record above. Existing
+risk limits do not require reapproval. Timing numbers below are selected owner
+policy, not a Webull service guarantee. No universal precedence
 rule is inferred from edit dates.
 
 ## Decision 1 proposal — one current NLV snapshot for new-risk capacity
@@ -198,7 +219,7 @@ PostgreSQL replay/conflict/deadline/rollover/denial tests. Resolve any schema
 changes separately. Keep broker capture blocked until its evidence contracts
 are met. Final policy text and implementation need independent review.
 
-## Three owner decisions — not yet approved
+## Three owner decisions — option A approved in each case
 
 1. **Equity basis:** recommend **A**, one validated current USD NLV snapshot for
    sizing/heat/theme, final reconciled flow treatment, separate frozen lock
@@ -216,6 +237,6 @@ are met. Final policy text and implementation need independent review.
    correction evidence. Tradeoff: A is restrictive and simpler to audit; B needs
    a more complex reviewed state/version protocol; C loses audit context.
 
-No approval is inferred from opening or merging this documentation PR. An
-explicit owner response identifying these choices is needed to approve policy.
+No approval is inferred from opening or merging this documentation PR. Policy
+approval comes from the explicit owner response recorded above.
 All broker trading, enforcement and paper/live order submission stay disabled.
