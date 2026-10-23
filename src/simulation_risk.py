@@ -2,6 +2,7 @@
 
 from datetime import UTC, timedelta
 from decimal import Decimal
+from fractions import Fraction
 
 from sqlalchemy import select
 
@@ -62,9 +63,9 @@ class SimulationRiskService(Layer3AuthorizationService):
         principal = self._current_principal()
         if principal is None:
             return self._deny(Layer3Reason.PRINCIPAL_UNAVAILABLE)
+        self._lock_account(session, principal.account_id)
         now = self._clock()
         self._require_utc(now)
-        self._lock_account(session, principal.account_id)
         state = self._read_loss_state(session, principal.account_id, now)
         if state is None:
             return self._deny(Layer3Reason.ATS009_UNAVAILABLE)
@@ -88,7 +89,13 @@ class SimulationRiskService(Layer3AuthorizationService):
             session, plan_id=plan_id, idempotency_key=idempotency_key
         )
 
-    def _sized_quantity(self, plan: TradePlan, snapshot: PortfolioSnapshot) -> int:
+    def _risk_time_is_eligible(self, at):
+        resolved = self._loss_locks.calendar.resolve(at)
+        return resolved is not None and resolved.eligible_new_risk
+
+    def _sized_quantity(
+        self, plan: TradePlan, snapshot: PortfolioSnapshot, reservations
+    ) -> int:
         regime = plan.score_snapshot.regime
         if regime is None:
             return 0
@@ -106,7 +113,19 @@ class SimulationRiskService(Layer3AuthorizationService):
             special_setup=False,
             explicit_regime_multiplier=None,
         )
-        return result.quantity
+        # Harness buying power is a conservative ceiling before active ATS
+        # commitments. Never infer that a newer snapshot released old charges.
+        committed = sum(
+            (
+                Fraction(r.entry) * r.remaining_quantity
+                + sum((Fraction(f.price) * f.quantity for f in r.fills), Fraction(0))
+                for r in reservations
+            ),
+            Fraction(0),
+        )
+        available = max(Fraction(0), Fraction(self.buying_power) - committed)
+        affordable = available / Fraction(plan.entry)
+        return min(result.quantity, affordable.numerator // affordable.denominator)
 
     def _append_event(self, session, **kwargs):
         if kwargs["event_type"] == "reserved":
