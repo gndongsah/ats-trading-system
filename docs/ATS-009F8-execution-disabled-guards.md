@@ -34,3 +34,14 @@ $env:ATS_TEST_DATABASE_URL="postgresql://postgres:<pw>@127.0.0.1:55432/ats_test"
 python -m pytest -q -rs --fail-on-skip
 ruff check . ; ruff format --check . ; git diff --check
 ```
+
+
+## Work review revision
+
+The original head e3c7d53 left inherited deprecated `copy(update=...)` able to
+produce execution_enabled=True. Work reproduced this bypass, disabled the
+legacy copy API explicitly (use guarded model_copy), and added two regression
+cases. Include/exclude projections through deprecated copy are unsupported.
+The original 702-case results remain coding-agent evidence for the original
+head; final revision validation is recorded in the PR. This guard remains a
+Python regression invariant, not protection against deliberate object mutation.

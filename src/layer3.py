@@ -358,6 +358,10 @@ class Layer3Decision(BaseModel):
             super().model_construct(_fields_set, **values)
         )
 
+    def copy(self, *, include=None, exclude=None, update=None, deep=False):
+        """Reject the deprecated validation-bypassing copy API."""
+        raise TypeError("Layer3Decision.copy is unsupported; use model_copy")
+
     def model_copy(self, *, update=None, deep: bool = False):  # type: ignore[override]
         data = self.model_dump() | dict(update or {})
         if data.get("execution_enabled") is not False:

@@ -124,3 +124,9 @@ def test_replay_of_a_tampered_stored_decision_fails_closed(tmp_path):
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()
+
+
+@pytest.mark.parametrize("update", [None, {"execution_enabled": True}])
+def test_deprecated_copy_is_rejected_in_favor_of_guarded_model_copy(update):
+    with pytest.raises(TypeError, match="use model_copy"):
+        make_decision().copy(update=update)
