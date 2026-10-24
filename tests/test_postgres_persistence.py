@@ -28,6 +28,7 @@ from src.ats009_accounting import (
     evaluate_loss_accounting,
 )
 from src.ats009_calendar import XNYSCalendar
+from src.database import install_utc_session_timezone
 from src.domain.evidence import EvidenceItem, SourceDocument
 from src.domain.models import (
     EvidenceStatus,
@@ -242,7 +243,9 @@ def migrated_postgres_database() -> Iterator[tuple[Engine, str]]:
 
     schema = f"ats_test_{uuid4().hex}"
     runtime_role = f"ats_runtime_{uuid4().hex}"
-    admin_engine = create_engine(database_url, pool_pre_ping=True)
+    admin_engine = install_utc_session_timezone(
+        create_engine(database_url, pool_pre_ping=True)
+    )
     test_engine = None
     runtime_role_created = False
     previous_runtime_role = os.environ.get("ATS_RUNTIME_ROLE")
@@ -254,7 +257,9 @@ def migrated_postgres_database() -> Iterator[tuple[Engine, str]]:
         scoped_url = make_url(database_url).update_query_dict(
             {"options": f"-csearch_path={schema}"}
         )
-        test_engine = create_engine(scoped_url, pool_pre_ping=True)
+        test_engine = install_utc_session_timezone(
+            create_engine(scoped_url, pool_pre_ping=True)
+        )
         alembic_config = Config(
             str(Path(__file__).resolve().parents[1] / "alembic.ini")
         )
