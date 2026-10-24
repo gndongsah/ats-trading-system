@@ -24,6 +24,38 @@ from src.database import Base
 JSON_DOCUMENT = JSON().with_variant(JSONB(), "postgresql")
 
 
+class MarketDataRecord(Base):
+    __tablename__ = "ats_market_data"
+    __table_args__ = (
+        CheckConstraint("revision >= 1", name="ck_ats_market_revision"),
+        CheckConstraint("ingested_at >= available_at", name="ck_ats_market_clock"),
+        Index(
+            "ix_ats_market_replay",
+            "source",
+            "symbol",
+            "stream",
+            "event_time",
+            "available_at",
+            "ingested_at",
+        ),
+    )
+
+    source: Mapped[str] = mapped_column(String(128), primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), primary_key=True)
+    stream: Mapped[str] = mapped_column(String(32), primary_key=True)
+    event_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), primary_key=True
+    )
+    revision: Mapped[int] = mapped_column(Integer, primary_key=True)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    event_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
+
+
 class TradeRecord(Base):
     __tablename__ = "ats_trades"
 
