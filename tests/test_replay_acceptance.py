@@ -44,7 +44,11 @@ class Harness:
     def __init__(self, engine):
         ctx = risk_fixture.setup(engine, quantity=10)
         self.factory, original, _, _, _ = ctx
-        self.snapshot = original.snapshot
+        # setup already published its snapshot; each acceptance tick publishes
+        # a new version even when its initial as-of timestamp is unchanged.
+        self.snapshot = original.snapshot.model_copy(
+            update={"version": original.snapshot.version + 1}
+        )
         self.calendar = original._loss_locks.calendar
         self.taxonomy = original._taxonomy
         self.principal = original._principal_provider
