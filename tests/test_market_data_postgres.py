@@ -56,7 +56,7 @@ def test_append_only_guards_and_runtime_privileges(migrated_postgres_database, a
     with engine.begin() as con:
         from sqlalchemy.orm import Session
 
-        with Session(bind=con) as session:
+        with Session(bind=con) as session, session.begin():
             MarketDataStore(session, clock=lambda: T).ingest(EVENTS[1])
     # Owner is stopped by triggers; runtime is limited to SELECT/INSERT.
     for runtime in (False, True):
