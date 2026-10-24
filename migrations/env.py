@@ -5,7 +5,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from migrations.configuration import migration_database_url
-from src.database import Base
+from src.database import Base, install_utc_session_timezone
 from src.persistence import models  # noqa: F401
 
 config = context.config
@@ -43,6 +43,7 @@ def run_migrations_online() -> None:
             prefix="sqlalchemy.",
             poolclass=pool.NullPool,
         )
+        install_utc_session_timezone(connectable)
         with connectable.connect() as migration_connection:
             context.configure(
                 connection=migration_connection,

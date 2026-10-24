@@ -15,7 +15,33 @@ def create_database_engine(database_url: str) -> Engine:
     engine = create_engine(database_url, pool_pre_ping=True, **engine_options)
     if database_url.startswith("sqlite"):
         event.listen(engine, "connect", _enable_sqlite_foreign_keys)
+    install_utc_session_timezone(engine)
     return engine
+
+
+def install_utc_session_timezone(engine: Engine) -> Engine:
+    """Pin every PostgreSQL session on ``engine`` to UTC.
+
+    Domain models reject timestamps that are not UTC. PostgreSQL returns
+    ``timestamptz`` values in the session time zone, which otherwise defaults to
+    the server's configured zone, so correctness would depend on server setup.
+    Non-PostgreSQL engines are returned unchanged.
+    """
+    if engine.dialect.name == "postgresql" and not event.contains(
+        engine, "connect", _set_utc_session_timezone
+    ):
+        event.listen(engine, "connect", _set_utc_session_timezone)
+    return engine
+
+
+def _set_utc_session_timezone(connection, _record) -> None:
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SET TIME ZONE 'UTC'")
+    finally:
+        cursor.close()
+    if not connection.autocommit:
+        connection.commit()
 
 
 def _enable_sqlite_foreign_keys(connection, _record) -> None:
