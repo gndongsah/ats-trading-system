@@ -317,6 +317,7 @@ def assess_portfolio_risk(
 
     total_risk = Fraction(0)
     factor_risk: dict[str, Fraction] = {}
+    theme_risk: dict[str, Fraction] = {}
     theme_notional: dict[str, Fraction] = {}
 
     for position in snapshot.positions:
@@ -333,6 +334,9 @@ def assess_portfolio_risk(
         )
         total_risk += risk
         _add_factor_risk(factor_risk, classification.factors, risk)
+        theme_risk[classification.theme] = (
+            theme_risk.get(classification.theme, Fraction(0)) + risk
+        )
         theme_notional[classification.theme] = theme_notional.get(
             classification.theme, Fraction(0)
         ) + position.quantity * _fraction(position.average_entry)
@@ -348,6 +352,9 @@ def assess_portfolio_risk(
         )
         total_risk += risk
         _add_factor_risk(factor_risk, classification.factors, risk)
+        theme_risk[classification.theme] = (
+            theme_risk.get(classification.theme, Fraction(0)) + risk
+        )
         theme_notional[classification.theme] = theme_notional.get(
             classification.theme, Fraction(0)
         ) + pending.remaining_quantity * _fraction(pending.entry)
@@ -375,6 +382,9 @@ def assess_portfolio_risk(
         risk = filled_risk + remaining_risk
         total_risk += risk
         _add_factor_risk(factor_risk, classification.factors, risk)
+        theme_risk[classification.theme] = (
+            theme_risk.get(classification.theme, Fraction(0)) + risk
+        )
         notional = sum(
             (fill.quantity * _fraction(fill.price) for fill in reservation.fills),
             Fraction(0),
@@ -404,6 +414,18 @@ def assess_portfolio_risk(
             ),
         ),
     ]
+    boundaries.append(
+        (
+            RiskReason.CORRELATED_HEAT_LIMIT,
+            _floor(
+                (
+                    factor_limit
+                    - theme_risk.get(candidate_classification.theme, Fraction(0))
+                )
+                / stop_distance
+            ),
+        )
+    )
     for factor in candidate_classification.factors:
         boundaries.append(
             (
