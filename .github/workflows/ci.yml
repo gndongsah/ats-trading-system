@@ -58,3 +58,15 @@ jobs:
 
       - name: Full test suite
         run: python -m pytest -q -rs --fail-on-skip
+
+      - name: Replay simulation acceptance report
+        if: always()
+        run: python -m src.replay_acceptance --output replay-acceptance.json
+
+      - name: Upload replay acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-acceptance-report
+          path: replay-acceptance.json
+          if-no-files-found: warn

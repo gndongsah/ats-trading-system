@@ -36,3 +36,15 @@ def test_ci_provides_a_disposable_test_database_to_the_suite():
     job = workflow["jobs"]["tests"]
     assert str(job["env"]["ATS_TEST_DATABASE_URL"]).endswith("/ats_test")
     assert job["services"]["postgres"]["env"]["POSTGRES_DB"] == "ats_test"
+
+
+def test_ci_runs_replay_acceptance_and_retains_report_on_failure():
+    report = steps()["Replay simulation acceptance report"]
+    assert (
+        report["run"]
+        == "python -m src.replay_acceptance --output replay-acceptance.json"
+    )
+    assert report["if"] == "always()" and not report.get("continue-on-error")
+    artifact = steps()["Upload replay acceptance report"]
+    assert artifact["if"] == "always()"
+    assert artifact["with"]["path"] == "replay-acceptance.json"
