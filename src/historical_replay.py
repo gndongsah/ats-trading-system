@@ -70,7 +70,9 @@ class HistoricalReplayContext(FrozenModel):
                 raise ValueError("research selection cannot repeat logical sources")
             for source in selection.sources:
                 if source.subject.casefold() != requirement.subject.casefold():
-                    raise ValueError("research source subject does not match requirement")
+                    raise ValueError(
+                        "research source subject does not match requirement"
+                    )
                 if source.source_type != requirement.source_type:
                     raise ValueError("research source type does not match requirement")
                 if (
