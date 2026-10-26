@@ -26,7 +26,7 @@ class PersistenceConflict(ValueError):
     """An append-only record ID was reused with different data."""
 
 
-JOURNAL_SCHEMA_VERSION = 4
+JOURNAL_SCHEMA_VERSION = 5
 SCORE_SNAPSHOT_SCHEMA_VERSION = 4
 
 
@@ -149,6 +149,19 @@ def _migrate_journal_v3_to_v4(payload: dict[str, Any]) -> dict[str, Any]:
             migrated["plan"]["score_snapshot"]
         ),
     }
+    return migrated
+
+
+def _migrate_journal_v4_to_v5(payload: dict[str, Any]) -> dict[str, Any]:
+    """Make historical outcomes explicitly non-live.
+
+    Legacy ATS journal fixtures and simulation evidence predate run-type identity.
+    They must never be silently interpreted as LIVE validation evidence.
+    """
+    migrated = dict(payload)
+    result = migrated.get("result")
+    if isinstance(result, dict):
+        migrated["result"] = {**result, "run_type": result.get("run_type", "PAPER")}
     return migrated
 
 
@@ -373,6 +386,7 @@ class JournalRepository:
                 1: _migrate_journal_v1_to_v2,
                 2: _migrate_journal_v2_to_v3,
                 3: _migrate_journal_v3_to_v4,
+                4: _migrate_journal_v4_to_v5,
             },
             current_version=JOURNAL_SCHEMA_VERSION,
         )
