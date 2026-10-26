@@ -9,8 +9,6 @@ from fractions import Fraction
 from types import MappingProxyType
 from uuid import UUID
 
-from src.run_type import RunType
-
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -19,6 +17,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from src.run_type import RunType
 
 ZERO = Decimal(0)
 ONE = Decimal(1)
