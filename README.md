@@ -110,6 +110,21 @@ eligibility service described below. Sprint 3 implements deterministic
 portfolio-risk reservations and loss-lock integration; ATS-027 evolves that
 account boundary into the Architecture v1.1 Portfolio State contract.
 
+## ATS-011 filings/news point-in-time ingestion
+
+ATS-011 extends the ATS-005 evidence store with explicit publication,
+availability and collector-owned ingestion clocks for regulatory filings and
+news. Source corrections append immutable versions; historical as-of reads
+apply publication, availability and ingestion cutoffs before selecting the
+latest then-known version.
+
+`JsonResearchDocumentAdapter` provides the first synthetic/regression adapter.
+`EvidenceRepository.ingest_source` owns first-ingestion time and preserves it
+across idempotent retries. Scoring eligibility also rejects source versions
+that were not yet available or ingested at the historical decision time.
+
+See [docs/ATS-011-filings-news-ingestion.md](docs/ATS-011-filings-news-ingestion.md).
+
 ## ATS-027 Portfolio State boundary
 
 `PortfolioState` in `src/portfolio.py` is the broker-independent account-state

@@ -194,11 +194,38 @@ class SourceDocumentRecord(Base):
     __table_args__ = (
         UniqueConstraint("source_id", "version", name="uq_ats_source_document_version"),
         CheckConstraint("version >= 1", name="ck_ats_source_document_version_positive"),
+        CheckConstraint(
+            "available_at >= published_at", name="ck_ats_source_available_clock"
+        ),
+        CheckConstraint(
+            "ingested_at >= available_at", name="ck_ats_source_ingested_clock"
+        ),
+        Index(
+            "ix_ats_source_replay",
+            "source_type",
+            "subject",
+            "published_at",
+            "available_at",
+            "ingested_at",
+            "source_id",
+            "version",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     source_id: Mapped[str] = mapped_column(String(255), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     source_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
 
 

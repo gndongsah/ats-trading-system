@@ -1498,6 +1498,11 @@ def test_postgres_evidence_is_append_only_and_runtime_privileges_are_restricted(
                 id=runtime_source.id,
                 source_id=runtime_source.source_id,
                 version=runtime_source.version,
+                source_type=runtime_source.source_type,
+                subject=runtime_source.subject,
+                published_at=runtime_source.published_at,
+                available_at=runtime_source.effective_available_at,
+                ingested_at=runtime_source.effective_ingested_at,
                 source_data=runtime_source.model_dump(mode="json"),
             )
         )
@@ -2823,3 +2828,72 @@ def test_f1_unbound_legacy_replay_is_denied_after_provider_change(
             session.scalar(select(func.count()).select_from(RiskReservationEventRecord))
             == 1
         )
+
+
+def test_postgres_source_as_of_excludes_delayed_correction(
+    migrated_postgres_engine: Engine,
+):
+    t0 = datetime(2026, 10, 26, 14, 0, tzinfo=UTC)
+    source_v1 = SourceDocument(
+        source_id="ats011:abc:10-q",
+        version=1,
+        source_type="regulatory_filing",
+        source_url="https://example.test/sec/abc-q3",
+        publisher="SEC",
+        subject="ABC",
+        published_at=t0 - timedelta(minutes=30),
+        observed_at=t0 - timedelta(minutes=25),
+        available_at=t0 - timedelta(minutes=25),
+        content_hash="a" * 64,
+        version_metadata={"accession": "0000123"},
+    )
+    source_v2 = SourceDocument(
+        source_id=source_v1.source_id,
+        version=2,
+        source_type=source_v1.source_type,
+        source_url=source_v1.source_url,
+        publisher=source_v1.publisher,
+        subject=source_v1.subject,
+        published_at=source_v1.published_at,
+        observed_at=t0 + timedelta(minutes=5),
+        available_at=t0 + timedelta(minutes=5),
+        correction_of_version=1,
+        content_hash="b" * 64,
+        version_metadata={"accession": "0000123-A"},
+    )
+    factory = sessionmaker(bind=migrated_postgres_engine)
+    with factory.begin() as session:
+        repository = EvidenceRepository(session)
+        persisted_v1 = repository.ingest_source(
+            source_v1, ingested_at=t0 - timedelta(minutes=20)
+        )
+        persisted_v2 = repository.ingest_source(
+            source_v2, ingested_at=t0 + timedelta(minutes=15)
+        )
+
+    with factory() as session:
+        repository = EvidenceRepository(session)
+        before_ingestion = repository.list_sources_as_of(
+            as_of=t0 + timedelta(minutes=10),
+            subject="ABC",
+            source_types=("regulatory_filing",),
+        )
+        after_ingestion = repository.list_sources_as_of(
+            as_of=t0 + timedelta(minutes=15),
+            subject="ABC",
+            source_types=("regulatory_filing",),
+        )
+        row = session.scalar(
+            select(SourceDocumentRecord).where(
+                SourceDocumentRecord.source_id == source_v1.source_id,
+                SourceDocumentRecord.version == 2,
+            )
+        )
+
+    assert before_ingestion == (persisted_v1,)
+    assert after_ingestion == (persisted_v2,)
+    assert row is not None
+    assert row.source_type == "regulatory_filing"
+    assert row.subject == "ABC"
+    assert row.available_at == source_v2.available_at
+    assert row.ingested_at == t0 + timedelta(minutes=15)

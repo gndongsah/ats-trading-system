@@ -17,6 +17,9 @@ class SourceDocument(ImmutableModel):
     subject: str = Field(min_length=1, max_length=255)
     published_at: datetime
     observed_at: datetime
+    available_at: datetime | None = None
+    ingested_at: datetime | None = None
+    correction_of_version: int | None = Field(default=None, ge=1)
     content_ref: str | None = Field(default=None, max_length=2048)
     content_hash: str | None = Field(default=None, min_length=64, max_length=64)
     version_metadata: dict[str, str] = Field(default_factory=dict)
@@ -29,10 +32,10 @@ class SourceDocument(ImmutableModel):
             raise ValueError("value must not be blank")
         return value
 
-    @field_validator("published_at", "observed_at")
+    @field_validator("published_at", "observed_at", "available_at", "ingested_at")
     @classmethod
-    def timestamps_are_utc(cls, value: datetime) -> datetime:
-        return _require_utc(value)
+    def timestamps_are_utc(cls, value: datetime | None) -> datetime | None:
+        return _require_utc(value) if value is not None else None
 
     @field_validator("content_hash")
     @classmethod
@@ -52,10 +55,31 @@ class SourceDocument(ImmutableModel):
         return value or None
 
     @model_validator(mode="after")
-    def observation_follows_publication(self) -> "SourceDocument":
+    def point_in_time_clocks_are_coherent(self) -> "SourceDocument":
         if self.observed_at < self.published_at:
             raise ValueError("source cannot be observed before publication")
+        if self.effective_available_at < self.published_at:
+            raise ValueError("source cannot be available before publication")
+        if self.effective_ingested_at < self.effective_available_at:
+            raise ValueError("source cannot be ingested before availability")
+        if (
+            self.correction_of_version is not None
+            and self.correction_of_version >= self.version
+        ):
+            raise ValueError("correction must reference an earlier source version")
         return self
+
+    @property
+    def effective_available_at(self) -> datetime:
+        """Return explicit availability or the legacy observation timestamp."""
+
+        return self.available_at or self.observed_at
+
+    @property
+    def effective_ingested_at(self) -> datetime:
+        """Return explicit ingestion or the earliest legacy point-in-time clock."""
+
+        return self.ingested_at or self.effective_available_at
 
 
 class EvidenceItem(ImmutableModel):
