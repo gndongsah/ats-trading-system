@@ -46,6 +46,9 @@ def test_complete_trade_round_trips_in_a_new_database_session():
             assert restored.result is not None
             assert restored.result.mae_r == entry.result.mae_r
             assert restored.result.mfe_r == entry.result.mfe_r
+            assert restored.result.run_type.value == "PAPER"
+            result_document = session.get(TradeResultRecord, entry.result.id).result_data
+            assert result_document["run_type"] == "PAPER"
             assert restored.plan_followed is True
             assert restored.mood == entry.mood
             assert restored.thesis == entry.thesis
@@ -67,7 +70,7 @@ def test_complete_trade_round_trips_in_a_new_database_session():
             snapshot_document = session.get(
                 ScoreSnapshotRecord, entry.plan.score_snapshot.id
             ).snapshot_data
-            assert journal_document["schema_version"] == 4
+            assert journal_document["schema_version"] == 5
             assert journal_document["data"] == entry.model_dump(mode="json")
             assert snapshot_document["schema_version"] == 4
             assert snapshot_document["data"] == entry.plan.score_snapshot.model_dump(
