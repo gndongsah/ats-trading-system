@@ -40,6 +40,8 @@ from src.evidence_verification import (
     evaluate_scoring_eligibility,
     score_contribution_from_eligibility,
 )
+from src.historical_replay import HistoricalReplayService, ResearchReplayRequirement
+from src.market_data import Bar, MarketDataStore, MarketEvent, ReplayRequirement
 from src.layer3 import (
     AuthenticatedAccountPrincipal,
     BrokerFillEvent,
@@ -2897,3 +2899,71 @@ def test_postgres_source_as_of_excludes_delayed_correction(
     assert row.subject == "ABC"
     assert row.available_at == source_v2.available_at
     assert row.ingested_at == t0 + timedelta(minutes=15)
+
+
+def test_postgres_unified_historical_replay_uses_only_then_known_inputs(
+    migrated_postgres_engine: Engine,
+):
+    as_of = datetime(2026, 10, 26, 14, 0, tzinfo=UTC)
+    source_id = f"ats012:abc:{uuid4()}"
+    event = MarketEvent(
+        source="ats012-postgres",
+        symbol="ABC",
+        event_time=as_of - timedelta(seconds=30),
+        available_at=as_of - timedelta(seconds=20),
+        revision=1,
+        payload=Bar(
+            interval="1m",
+            open=Decimal(99),
+            high=Decimal(101),
+            low=Decimal(98),
+            close=Decimal(100),
+            volume=1000,
+        ),
+    )
+    filing = SourceDocument(
+        source_id=source_id,
+        version=1,
+        source_type="regulatory_filing",
+        source_url="https://example.test/sec/abc-q3",
+        publisher="SEC",
+        subject="ABC",
+        published_at=as_of - timedelta(hours=2),
+        observed_at=as_of - timedelta(hours=1),
+        available_at=as_of - timedelta(hours=1),
+        content_hash="a" * 64,
+    )
+    factory = sessionmaker(bind=migrated_postgres_engine)
+    with factory.begin() as session:
+        MarketDataStore(
+            session,
+            clock=lambda: as_of - timedelta(seconds=10),
+        ).ingest(event)
+        persisted_filing = EvidenceRepository(session).ingest_source(
+            filing,
+            ingested_at=as_of - timedelta(minutes=50),
+        )
+
+    with factory() as session:
+        context = HistoricalReplayService(session).replay(
+            as_of=as_of,
+            market_requirements=(
+                ReplayRequirement(
+                    source="ats012-postgres",
+                    symbol="ABC",
+                    stream="bar:1m",
+                    max_age=timedelta(minutes=1),
+                ),
+            ),
+            research_requirements=(
+                ResearchReplayRequirement(
+                    subject="ABC",
+                    source_type="regulatory_filing",
+                    max_publication_age=timedelta(hours=4),
+                ),
+            ),
+        )
+
+    assert context.market.observations[0].event == event
+    assert context.research[0].sources == (persisted_filing,)
+    assert context.as_of == as_of
