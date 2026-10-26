@@ -128,7 +128,7 @@ class HistoricalReplayService:
             selections.append(
                 ResearchReplaySelection(
                     requirement=requirement,
-                    sources=fresh[: requirement.min_sources],
+                    sources=fresh,
                 )
             )
 
