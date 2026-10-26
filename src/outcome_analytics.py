@@ -47,7 +47,9 @@ def eligible_for_live_validation(result: TradeResult) -> bool:
     return is_live_validation_run_type(result.run_type)
 
 
-def live_validation_results(results: tuple[TradeResult, ...]) -> tuple[TradeResult, ...]:
+def live_validation_results(
+    results: tuple[TradeResult, ...],
+) -> tuple[TradeResult, ...]:
     """Return only outcomes eligible for live validation evidence."""
 
     return tuple(result for result in results if eligible_for_live_validation(result))
