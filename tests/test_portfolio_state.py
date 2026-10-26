@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.portfolio import (
+    CandidateExposure,
     ExposureSummary,
     PortfolioRiskPolicy,
     PortfolioRunType,
@@ -17,7 +18,6 @@ from src.portfolio import (
     RiskReason,
     RiskTaxonomy,
     assess_portfolio_risk,
-    CandidateExposure,
 )
 
 NOW = datetime(2026, 10, 26, 18, 0, tzinfo=UTC)
@@ -41,7 +41,7 @@ def state(**overrides) -> PortfolioState:
         "as_of": NOW,
         "policy_version": POLICY.version,
         "taxonomy_version": TAXONOMY.version,
-        "equity": Decimal("100000"),
+        "equity": Decimal(100000),
         "positions": (),
         "pending_orders": (),
         "positions_complete": True,
@@ -52,8 +52,8 @@ def state(**overrides) -> PortfolioState:
         "source_version": "fixture-v1",
         "observed_at": NOW - timedelta(minutes=1),
         "ingested_at": NOW,
-        "cash": Decimal("25000"),
-        "buying_power": Decimal("50000"),
+        "cash": Decimal(25000),
+        "buying_power": Decimal(50000),
         "equity_provenance": PortfolioValueProvenance(
             source="synthetic-replay",
             source_version="fixture-v1",
@@ -83,7 +83,7 @@ def state(**overrides) -> PortfolioState:
             ExposureSummary(
                 key="ai_networking",
                 risk_r=Decimal("0.75"),
-                gross_notional=Decimal("15000"),
+                gross_notional=Decimal(15000),
             ),
         ),
         "factor_exposure": (
@@ -105,7 +105,7 @@ def test_portfolio_snapshot_remains_a_compatibility_alias():
         as_of=NOW,
         policy_version=POLICY.version,
         taxonomy_version=TAXONOMY.version,
-        equity=Decimal("100000"),
+        equity=Decimal(100000),
         positions=(),
         pending_orders=(),
         positions_complete=True,
@@ -120,8 +120,8 @@ def test_portfolio_snapshot_remains_a_compatibility_alias():
 def test_state_carries_architecture_v11_portfolio_context():
     snapshot = state()
     assert snapshot.run_type is PortfolioRunType.REPLAY
-    assert snapshot.cash == Decimal("25000")
-    assert snapshot.buying_power == Decimal("50000")
+    assert snapshot.cash == Decimal(25000)
+    assert snapshot.buying_power == Decimal(50000)
     assert snapshot.open_r == Decimal("1.25")
     assert snapshot.theme_exposure[0].key == "AI_NETWORKING"
     assert snapshot.factor_exposure[0].key == "AI_CAPEX"
@@ -165,8 +165,8 @@ def test_risk_engine_consumes_portfolio_state_freshness():
         candidate=CandidateExposure(
             ticker="ABC",
             requested_quantity=10,
-            entry=Decimal("100"),
-            stop=Decimal("98"),
+            entry=Decimal(100),
+            stop=Decimal(98),
         ),
         reservations=(),
         taxonomy=TAXONOMY,
