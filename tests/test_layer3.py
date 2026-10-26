@@ -26,11 +26,13 @@ from src.layer3 import (
     VerifiedBrokerStopConfirmation,
     submit_order_to_broker,
 )
-from src.persistence.models import RiskReservationEventRecord
+from src.persistence.models import PortfolioSnapshotRecord, RiskReservationEventRecord
 from src.persistence.repository import JournalRepository
 from src.portfolio import (
     PortfolioRiskPolicy,
+    PortfolioRunType,
     PortfolioSnapshot,
+    PortfolioState,
     PositionExposure,
     RiskClassification,
     RiskDecision,
@@ -871,6 +873,47 @@ def test_plan_account_binding_and_broker_execution_remain_disabled(tmp_path):
             ExecutionDisabledError, match="broker execution is disabled"
         ):
             submit_order_to_broker(plan_id=plan_id)
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+def test_publish_state_persists_richer_contract_and_snapshot_wrapper_stays_compatible(
+    tmp_path,
+):
+    engine, factory, service, account_id, _ = create_service_and_db(tmp_path)
+    try:
+        richer = PortfolioState.model_validate(
+            portfolio_snapshot(account_id).model_dump(mode="python")
+            | {
+                "version": 2,
+                "run_type": PortfolioRunType.REPLAY,
+                "source": "synthetic-replay",
+                "source_version": "fixture-v1",
+                "observed_at": NOW,
+                "ingested_at": NOW,
+                "cash": Decimal(25000),
+                "buying_power": Decimal(50000),
+                "daily_realized_r": Decimal("-0.5"),
+                "weekly_realized_r": Decimal("1.0"),
+                "validation_stage": "experimental",
+            }
+        )
+        with factory() as session, session.begin():
+            service.publish_state(session, richer)
+
+        with factory() as session:
+            row = session.scalar(
+                select(PortfolioSnapshotRecord)
+                .where(PortfolioSnapshotRecord.account_id == account_id)
+                .order_by(PortfolioSnapshotRecord.version.desc())
+                .limit(1)
+            )
+            assert row is not None
+            restored = PortfolioState.model_validate(row.snapshot_data)
+            assert restored == richer
+            assert restored.run_type is PortfolioRunType.REPLAY
+            assert restored.validation_stage == "EXPERIMENTAL"
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()

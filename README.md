@@ -106,8 +106,27 @@ python -m pytest tests/test_domain_models.py -v
 These models establish immutable domain-level contracts. Append-only journal
 records and their PostgreSQL schema are implemented in ATS-004. ATS-005
 provides the append-only source/evidence store and deterministic scoring
-eligibility service described below. Portfolio-level risk limits remain future
-work.
+eligibility service described below. Sprint 3 implements deterministic
+portfolio-risk reservations and loss-lock integration; ATS-027 evolves that
+account boundary into the Architecture v1.1 Portfolio State contract.
+
+## ATS-027 Portfolio State boundary
+
+`PortfolioState` in `src/portfolio.py` is the broker-independent account-state
+contract consumed by Layer 3. It extends the existing Sprint 3 portfolio inputs
+with explicit LIVE/PAPER/REPLAY run type, source and timing metadata, optional
+cash/buying power and value provenance, reported exposure summaries, realized-R
+context, and validation stage. The risk engine still derives heat and
+concentration deterministically from normalized positions, orders, active
+reservations, stops, policy and taxonomy rather than trusting reported
+aggregates.
+
+`PortfolioSnapshot` remains a compatibility alias while callers migrate.
+`Layer3AuthorizationService.publish_state` is the canonical persistence
+boundary; `publish_snapshot` remains a compatibility wrapper. Broker execution
+remains unconditionally disabled.
+
+See [docs/ATS-027-portfolio-state.md](docs/ATS-027-portfolio-state.md).
 
 ## ATS-004 PostgreSQL journal persistence
 

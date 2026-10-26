@@ -48,6 +48,56 @@ class RiskModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+class PortfolioRunType(StrEnum):
+    LIVE = "LIVE"
+    PAPER = "PAPER"
+    REPLAY = "REPLAY"
+
+
+class PortfolioValueProvenance(RiskModel):
+    source: str = Field(min_length=1, max_length=128)
+    source_version: str = Field(min_length=1, max_length=128)
+    observed_at: datetime
+    ingested_at: datetime
+    provenance_ref: str = Field(min_length=1, max_length=256)
+    reconciled: StrictBool
+
+    @field_validator("source", "source_version", "provenance_ref")
+    @classmethod
+    def normalize_nonblank(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("provenance fields must not be blank")
+        return normalized
+
+    @field_validator("observed_at", "ingested_at")
+    @classmethod
+    def timestamps_are_utc(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() != timedelta(0):
+            raise ValueError("provenance timestamps must be UTC-aware")
+        return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def ingestion_follows_observation(self) -> "PortfolioValueProvenance":
+        if self.ingested_at < self.observed_at:
+            raise ValueError("ingested_at cannot precede observed_at")
+        return self
+
+
+class ExposureSummary(RiskModel):
+    key: str = Field(min_length=1, max_length=128)
+    risk_r: Decimal = Field(ge=ZERO, allow_inf_nan=False)
+    gross_notional: Decimal | None = Field(default=None, ge=ZERO, allow_inf_nan=False)
+
+    @field_validator("key")
+    @classmethod
+    def normalize_key(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("exposure key must not be blank")
+        return normalized
+
+
 class PositionExposure(RiskModel):
     ticker: str = Field(min_length=1, max_length=32)
     quantity: int = Field(gt=0, strict=True)
@@ -86,7 +136,15 @@ class PendingExposure(RiskModel):
         return self
 
 
-class PortfolioSnapshot(RiskModel):
+class PortfolioState(RiskModel):
+    """Broker-independent account state consumed by deterministic Layer 3 risk.
+
+    The supplemental account metrics are intentionally not trusted as substitutes
+    for the deterministic calculations derived from normalized positions, orders,
+    reservations and the configured taxonomy. They exist so adapters can carry a
+    complete reconciled account view across LIVE, PAPER and REPLAY workflows.
+    """
+
     account_id: UUID
     version: int = Field(ge=1, strict=True)
     as_of: datetime
@@ -99,12 +157,85 @@ class PortfolioSnapshot(RiskModel):
     orders_complete: bool
     ats_managed_exposure_excluded: StrictBool
 
-    @field_validator("as_of")
+    run_type: PortfolioRunType = PortfolioRunType.PAPER
+    source: str = Field(default="LEGACY_UNSPECIFIED", min_length=1, max_length=128)
+    source_version: str = Field(default="1", min_length=1, max_length=128)
+    observed_at: datetime | None = None
+    ingested_at: datetime | None = None
+
+    cash: Decimal | None = Field(default=None, ge=ZERO, allow_inf_nan=False)
+    buying_power: Decimal | None = Field(default=None, ge=ZERO, allow_inf_nan=False)
+    equity_provenance: PortfolioValueProvenance | None = None
+    cash_provenance: PortfolioValueProvenance | None = None
+    buying_power_provenance: PortfolioValueProvenance | None = None
+
+    open_r: Decimal | None = Field(default=None, ge=ZERO, allow_inf_nan=False)
+    theme_exposure: tuple[ExposureSummary, ...] = ()
+    factor_exposure: tuple[ExposureSummary, ...] = ()
+    daily_realized_r: Decimal | None = Field(default=None, allow_inf_nan=False)
+    weekly_realized_r: Decimal | None = Field(default=None, allow_inf_nan=False)
+    validation_stage: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @field_validator("as_of", "observed_at", "ingested_at")
     @classmethod
-    def as_of_is_utc(cls, value: datetime) -> datetime:
+    def timestamps_are_utc(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
         if value.tzinfo is None or value.utcoffset() != timedelta(0):
-            raise ValueError("portfolio snapshot timestamp must be UTC-aware")
+            raise ValueError("portfolio state timestamps must be UTC-aware")
         return value.astimezone(UTC)
+
+    @field_validator("source", "source_version")
+    @classmethod
+    def normalize_source(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("portfolio state source fields must not be blank")
+        return normalized
+
+    @field_validator("validation_stage")
+    @classmethod
+    def normalize_validation_stage(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("validation_stage must not be blank")
+        return normalized
+
+    @model_validator(mode="after")
+    def source_chronology_is_coherent(self) -> "PortfolioState":
+        if (
+            self.observed_at is not None
+            and self.ingested_at is not None
+            and self.ingested_at < self.observed_at
+        ):
+            raise ValueError("portfolio state ingested_at cannot precede observed_at")
+        return self
+
+    @property
+    def effective_observed_at(self) -> datetime:
+        return self.observed_at or self.as_of
+
+    @property
+    def has_explicit_source_provenance(self) -> bool:
+        return (
+            self.source != "LEGACY_UNSPECIFIED"
+            and self.observed_at is not None
+            and self.ingested_at is not None
+        )
+
+    def is_fresh(self, at: datetime, maximum_age: timedelta) -> bool:
+        if at.tzinfo is None or at.utcoffset() != timedelta(0):
+            raise ValueError("freshness evaluation timestamp must be UTC-aware")
+        if maximum_age <= timedelta(0):
+            raise ValueError("maximum_age must be positive")
+        age = at.astimezone(UTC) - self.effective_observed_at
+        return timedelta(0) <= age <= maximum_age
+
+
+# Backward-compatible import name while callers migrate to Architecture v1.1.
+PortfolioSnapshot = PortfolioState
 
 
 class RiskClassification(RiskModel):
@@ -276,7 +407,7 @@ def _floor(value: Fraction) -> int:
 
 def assess_portfolio_risk(
     *,
-    snapshot: PortfolioSnapshot,
+    snapshot: PortfolioState,
     candidate: CandidateExposure,
     reservations: tuple[ReservationExposure, ...],
     taxonomy: RiskTaxonomy,
@@ -296,8 +427,7 @@ def assess_portfolio_risk(
         return _deny(RiskReason.PORTFOLIO_STATE_INCOMPLETE)
     if now.tzinfo is None or now.utcoffset() != timedelta(0):
         raise ValueError("evaluation timestamp must be UTC-aware")
-    age = now.astimezone(UTC) - snapshot.as_of
-    if age < timedelta(0) or age > policy.snapshot_max_age:
+    if not snapshot.is_fresh(now, policy.snapshot_max_age):
         return _deny(RiskReason.PORTFOLIO_STATE_STALE)
 
     candidate_classification = taxonomy.classify(candidate.ticker)
