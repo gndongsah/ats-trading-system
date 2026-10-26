@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Generic, Literal, TypeVar
 
-from pydantic import Field, StrictInt, field_validator
+from pydantic import Field, StrictInt, field_validator, model_validator
 
 from src.domain.evidence import SourceDocument
 from src.domain.models import _require_utc
@@ -58,6 +58,33 @@ class HistoricalReplayContext(FrozenModel):
     @classmethod
     def as_of_is_utc(cls, value: datetime) -> datetime:
         return _require_utc(value)
+
+    @model_validator(mode="after")
+    def context_is_point_in_time_coherent(self) -> "HistoricalReplayContext":
+        if self.market.as_of != self.as_of:
+            raise ValueError("market replay timestamp must match historical context")
+        for selection in self.research:
+            requirement = selection.requirement
+            if len(selection.sources) < requirement.min_sources:
+                raise ValueError("research selection does not satisfy minimum sources")
+            source_ids = [source.source_id for source in selection.sources]
+            if len(set(source_ids)) != len(source_ids):
+                raise ValueError("research selection cannot repeat logical sources")
+            for source in selection.sources:
+                if source.subject.casefold() != requirement.subject.casefold():
+                    raise ValueError("research source subject does not match requirement")
+                if source.source_type != requirement.source_type:
+                    raise ValueError("research source type does not match requirement")
+                if (
+                    source.published_at > self.as_of
+                    or source.effective_available_at > self.as_of
+                    or source.effective_ingested_at > self.as_of
+                ):
+                    raise ValueError("historical context contains future research data")
+                age = self.as_of - source.published_at
+                if age < timedelta(0) or age > requirement.max_publication_age:
+                    raise ValueError("historical context contains stale research data")
+        return self
 
     @property
     def digest(self) -> str:
