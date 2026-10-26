@@ -38,7 +38,7 @@ from src.portfolio import (
     FilledExposure,
     PortfolioRiskPolicy,
     PortfolioRiskResult,
-    PortfolioSnapshot,
+    PortfolioState,
     ReservationExposure,
     RiskDecision,
     RiskTaxonomy,
@@ -152,14 +152,22 @@ class AccountPrincipalProvider(Protocol):
     def current_principal(self) -> AuthenticatedAccountPrincipal | None: ...
 
 
-class PortfolioSnapshotVerifier(Protocol):
-    """Verify authoritative account, positions, orders, freshness and exclusions."""
+class PortfolioStateVerifier(Protocol):
+    """Verify a reconciled, broker-independent Portfolio State.
+
+    The method name verify_snapshot remains during the compatibility window
+    because Sprint 3 verifier adapters already implement it.
+    """
 
     def verify_snapshot(
         self,
-        snapshot: PortfolioSnapshot,
+        snapshot: PortfolioState,
         principal: AuthenticatedAccountPrincipal,
-    ) -> PortfolioSnapshot | None: ...
+    ) -> PortfolioState | None: ...
+
+
+# Compatibility name for existing Sprint 3 adapters.
+PortfolioSnapshotVerifier = PortfolioStateVerifier
 
 
 class BrokerOrderStatus(StrEnum):
@@ -386,7 +394,7 @@ class Layer3AuthorizationService:
         taxonomy: RiskTaxonomy,
         loss_locks: LossLockProvider | None,
         principal_provider: AccountPrincipalProvider | None = None,
-        snapshot_verifier: PortfolioSnapshotVerifier | None = None,
+        snapshot_verifier: PortfolioStateVerifier | None = None,
         broker_event_verifier: BrokerEventVerifier | None = None,
         ats009_policy_version: str | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -400,20 +408,24 @@ class Layer3AuthorizationService:
         self._ats009_policy_version = ats009_policy_version
         self._clock = clock
 
-    def publish_snapshot(self, session: Session, snapshot: PortfolioSnapshot) -> None:
+    def publish_state(self, session: Session, state: PortfolioState) -> None:
+        """Persist one verified Portfolio State revision.
+
+        Broker-specific adapters may build and verify state outside Layer 3, but
+        Layer 3 persists only the normalized contract. The existing database
+        table name remains unchanged for migration compatibility.
+        """
         self._require_transaction(session)
         principal = self._current_principal()
         if principal is None:
             raise PermissionError("trusted account principal is unavailable")
         if self._snapshot_verifier is None:
-            raise PermissionError("trusted portfolio snapshot source is unavailable")
-        if snapshot.account_id != principal.account_id:
-            raise PermissionError(
-                "snapshot account does not match authenticated account"
-            )
-        verified_snapshot = self._snapshot_verifier.verify_snapshot(snapshot, principal)
-        if verified_snapshot is None or verified_snapshot != snapshot:
-            raise PermissionError("portfolio snapshot authentication failed")
+            raise PermissionError("trusted portfolio state source is unavailable")
+        if state.account_id != principal.account_id:
+            raise PermissionError("portfolio state account does not match principal")
+        verified_state = self._snapshot_verifier.verify_snapshot(state, principal)
+        if verified_state is None or verified_state != state:
+            raise PermissionError("portfolio state authentication failed")
         self._lock_account(session, principal.account_id)
         latest = session.scalar(
             select(PortfolioSnapshotRecord)
@@ -421,18 +433,22 @@ class Layer3AuthorizationService:
             .order_by(PortfolioSnapshotRecord.version.desc())
             .limit(1)
         )
-        if latest is not None and snapshot.version <= latest.version:
-            raise ValueError("portfolio snapshot version must increase monotonically")
+        if latest is not None and state.version <= latest.version:
+            raise ValueError("portfolio state version must increase monotonically")
         session.add(
             PortfolioSnapshotRecord(
                 id=uuid4(),
                 account_id=principal.account_id,
-                version=snapshot.version,
-                as_of=snapshot.as_of,
-                snapshot_data=snapshot.model_dump(mode="json"),
+                version=state.version,
+                as_of=state.as_of,
+                snapshot_data=state.model_dump(mode="json"),
             )
         )
         session.flush()
+
+    def publish_snapshot(self, session: Session, snapshot: PortfolioState) -> None:
+        """Compatibility wrapper for Sprint 3 callers."""
+        self.publish_state(session, snapshot)
 
     def authorize_with_retry(
         self,
@@ -521,7 +537,7 @@ class Layer3AuthorizationService:
                 .order_by(PortfolioSnapshotRecord.version.desc())
                 .limit(1)
             )
-            replay_snapshot = PortfolioSnapshot.model_validate(
+            replay_snapshot = PortfolioState.model_validate(
                 replay_snapshot_record.snapshot_data
             )
             replay_state = self._read_loss_state(session, account_id, now)
@@ -562,7 +578,7 @@ class Layer3AuthorizationService:
             return self._deny(Layer3Reason.SNAPSHOT_UNAVAILABLE)
         if snapshot_record.account_id != account_id:
             return self._deny(Layer3Reason.SNAPSHOT_VERSION_CONFLICT)
-        snapshot = PortfolioSnapshot.model_validate(snapshot_record.snapshot_data)
+        snapshot = PortfolioState.model_validate(snapshot_record.snapshot_data)
         if snapshot.account_id != account_id:
             return self._deny(Layer3Reason.SNAPSHOT_VERSION_CONFLICT)
         verified_snapshot = self._snapshot_verifier.verify_snapshot(snapshot, principal)
@@ -689,7 +705,7 @@ class Layer3AuthorizationService:
 
     def _final_evidence_is_fresh(
         self,
-        snapshot: PortfolioSnapshot,
+        snapshot: PortfolioState,
         loss_state: LossLockState,
         started_at: datetime,
     ) -> bool:
@@ -711,7 +727,7 @@ class Layer3AuthorizationService:
     def _sized_quantity(
         self,
         plan: TradePlan,
-        snapshot: PortfolioSnapshot,
+        snapshot: PortfolioState,
         reservations: tuple[ReservationExposure, ...],
     ) -> int:
         """Default preserves existing externally sized plans."""
