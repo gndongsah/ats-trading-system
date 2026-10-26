@@ -43,9 +43,9 @@ def market_event(*, revision=1, available_at=None, close="100") -> MarketEvent:
         revision=revision,
         payload=Bar(
             interval="1m",
-            open=Decimal("99"),
-            high=Decimal("101"),
-            low=Decimal("98"),
+            open=Decimal(99),
+            high=Decimal(101),
+            low=Decimal(98),
             close=Decimal(close),
             volume=1000,
         ),
