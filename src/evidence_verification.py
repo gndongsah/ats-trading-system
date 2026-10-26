@@ -24,6 +24,8 @@ class EligibilityReason(str, Enum):
     SOURCE_NOT_TRACEABLE = "source_not_traceable"
     SOURCE_REFERENCE_MISMATCH = "source_reference_mismatch"
     PUBLICATION_AFTER_DECISION = "publication_after_decision"
+    AVAILABILITY_AFTER_DECISION = "availability_after_decision"
+    INGESTION_AFTER_DECISION = "ingestion_after_decision"
     OBSERVATION_AFTER_DECISION = "observation_after_decision"
     SUBJECT_MISMATCH = "subject_mismatch"
     FACTOR_MISMATCH = "factor_mismatch"
@@ -152,6 +154,10 @@ def evaluate_scoring_eligibility(
             reasons.add(EligibilityReason.SOURCE_NOT_TRACEABLE)
         if source.published_at > decision_at:
             reasons.add(EligibilityReason.PUBLICATION_AFTER_DECISION)
+        if source.effective_available_at > decision_at:
+            reasons.add(EligibilityReason.AVAILABILITY_AFTER_DECISION)
+        if source.effective_ingested_at > decision_at:
+            reasons.add(EligibilityReason.INGESTION_AFTER_DECISION)
         if source.observed_at > decision_at or evidence.observed_at > decision_at:
             reasons.add(EligibilityReason.OBSERVATION_AFTER_DECISION)
         if evidence.observed_at < source.observed_at:
