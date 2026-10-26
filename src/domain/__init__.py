@@ -1,4 +1,3 @@
-from src.run_type import RunType
 from src.domain.evidence import EvidenceItem, SourceDocument
 from src.domain.models import (
     EvidenceRef,
@@ -24,6 +23,7 @@ from src.domain.models import (
     TradingStyle,
     ValidationStage,
 )
+from src.run_type import RunType
 
 __all__ = [
     "EvidenceItem",
