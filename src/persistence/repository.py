@@ -325,6 +325,7 @@ class JournalRepository:
                     "id": entry.result.id,
                     "trade_id": entry.plan.trade_id,
                     "plan_id": entry.result.plan_id,
+                    "run_type": entry.result.run_type.value,
                     "result_data": entry.result.model_dump(mode="json"),
                 },
             )
