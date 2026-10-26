@@ -188,3 +188,34 @@ def test_schema_v3_journal_and_snapshot_documents_deserialize_without_rewrite():
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()
+
+
+def test_schema_v4_journal_migrates_missing_run_type_to_paper_without_rewrite():
+    engine = create_database_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    entry = make_complete_trade()
+    legacy_data = entry.model_dump(mode="json")
+    assert legacy_data["result"] is not None
+    legacy_data["result"].pop("run_type", None)
+    legacy_document = {"schema_version": 4, "data": deepcopy(legacy_data)}
+    try:
+        with Session(engine) as session, session.begin():
+            JournalRepository(session).save(entry)
+            session.execute(
+                update(JournalEntryRecord)
+                .where(JournalEntryRecord.id == entry.id)
+                .values(entry_data=legacy_document)
+            )
+
+        with Session(engine) as session:
+            restored = JournalRepository(session).get(entry.id)
+            stored = session.get(JournalEntryRecord, (entry.id, 1)).entry_data
+
+        assert restored is not None
+        assert restored.result is not None
+        assert restored.result.run_type.value == "PAPER"
+        assert stored == legacy_document
+        assert "run_type" not in stored["data"]["result"]
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
