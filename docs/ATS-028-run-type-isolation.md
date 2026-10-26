@@ -23,6 +23,8 @@ Outcome evidence domains are separate by default:
 
 Journal schema v5 migrates pre-v5 journal documents that contain a result but no run type to explicit `PAPER` at read time. The stored append-only historical document is not rewritten.
 
+Alembic revision `20261026_08` also adds a non-null, queryable `run_type` column to `ats_trade_results`, constrained to LIVE/PAPER/REPLAY. Existing relational rows receive the fail-safe `PAPER` default, so SQL-level analytics can filter evidence domains without parsing JSON.
+
 ## Validation boundary
 
 `eligible_for_live_validation` and `live_validation_results` accept only `LIVE` outcomes. They are the current evidence-selection boundary; ATS-028 does not implement the future validation-stage promotion engine itself.
@@ -45,5 +47,5 @@ Tests cover:
 - LIVE-only validation filtering;
 - default analytics exclude PAPER and REPLAY;
 - mixed-mode analytics require explicit scope;
-- persisted TradeResult JSON contains run type;
+- persisted TradeResult JSON and relational result rows contain run type;
 - journal schema v4 data migrates missing run type to PAPER without rewriting history.
