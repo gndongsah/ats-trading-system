@@ -87,9 +87,7 @@ class PortfolioValueProvenance(RiskModel):
 class ExposureSummary(RiskModel):
     key: str = Field(min_length=1, max_length=128)
     risk_r: Decimal = Field(ge=ZERO, allow_inf_nan=False)
-    gross_notional: Decimal | None = Field(
-        default=None, ge=ZERO, allow_inf_nan=False
-    )
+    gross_notional: Decimal | None = Field(default=None, ge=ZERO, allow_inf_nan=False)
 
     @field_validator("key")
     @classmethod
