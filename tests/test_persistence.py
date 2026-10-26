@@ -47,8 +47,9 @@ def test_complete_trade_round_trips_in_a_new_database_session():
             assert restored.result.mae_r == entry.result.mae_r
             assert restored.result.mfe_r == entry.result.mfe_r
             assert restored.result.run_type.value == "PAPER"
-            result_document = session.get(TradeResultRecord, entry.result.id).result_data
-            assert result_document["run_type"] == "PAPER"
+            result_row = session.get(TradeResultRecord, entry.result.id)
+            assert result_row.run_type == "PAPER"
+            assert result_row.result_data["run_type"] == "PAPER"
             assert restored.plan_followed is True
             assert restored.mood == entry.mood
             assert restored.thesis == entry.thesis
