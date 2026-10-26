@@ -9,6 +9,8 @@ from fractions import Fraction
 from types import MappingProxyType
 from uuid import UUID
 
+from src.run_type import RunType
+
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -48,10 +50,8 @@ class RiskModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
-class PortfolioRunType(StrEnum):
-    LIVE = "LIVE"
-    PAPER = "PAPER"
-    REPLAY = "REPLAY"
+# Compatibility name retained for ATS-027 callers.
+PortfolioRunType = RunType
 
 
 class PortfolioValueProvenance(RiskModel):
