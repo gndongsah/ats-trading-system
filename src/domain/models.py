@@ -7,6 +7,8 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from src.run_type import RunType
+
 
 class ImmutableModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -369,6 +371,7 @@ class PositionSnapshot(ImmutableModel):
 class TradeResult(ImmutableModel):
     id: UUID = Field(default_factory=uuid4)
     plan_id: UUID
+    run_type: RunType = RunType.PAPER
     closed_at: datetime
     realized_pnl: Decimal
     r_multiple: Decimal
