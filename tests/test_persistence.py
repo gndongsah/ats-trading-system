@@ -46,6 +46,10 @@ def test_complete_trade_round_trips_in_a_new_database_session():
             assert restored.result is not None
             assert restored.result.mae_r == entry.result.mae_r
             assert restored.result.mfe_r == entry.result.mfe_r
+            assert restored.result.run_type.value == "PAPER"
+            result_row = session.get(TradeResultRecord, entry.result.id)
+            assert result_row.run_type == "PAPER"
+            assert result_row.result_data["run_type"] == "PAPER"
             assert restored.plan_followed is True
             assert restored.mood == entry.mood
             assert restored.thesis == entry.thesis
@@ -67,7 +71,7 @@ def test_complete_trade_round_trips_in_a_new_database_session():
             snapshot_document = session.get(
                 ScoreSnapshotRecord, entry.plan.score_snapshot.id
             ).snapshot_data
-            assert journal_document["schema_version"] == 4
+            assert journal_document["schema_version"] == 5
             assert journal_document["data"] == entry.model_dump(mode="json")
             assert snapshot_document["schema_version"] == 4
             assert snapshot_document["data"] == entry.plan.score_snapshot.model_dump(
@@ -182,6 +186,37 @@ def test_schema_v3_journal_and_snapshot_documents_deserialize_without_rewrite():
         assert decode_score_snapshot(old_snapshot_document) == snapshot
         assert stored_journal_document == old_journal_document
         assert stored_snapshot_document == old_snapshot_document
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+def test_schema_v4_journal_migrates_missing_run_type_to_paper_without_rewrite():
+    engine = create_database_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    entry = make_complete_trade()
+    legacy_data = entry.model_dump(mode="json")
+    assert legacy_data["result"] is not None
+    legacy_data["result"].pop("run_type", None)
+    legacy_document = {"schema_version": 4, "data": deepcopy(legacy_data)}
+    try:
+        with Session(engine) as session, session.begin():
+            JournalRepository(session).save(entry)
+            session.execute(
+                update(JournalEntryRecord)
+                .where(JournalEntryRecord.id == entry.id)
+                .values(entry_data=legacy_document)
+            )
+
+        with Session(engine) as session:
+            restored = JournalRepository(session).get(entry.id)
+            stored = session.get(JournalEntryRecord, (entry.id, 1)).entry_data
+
+        assert restored is not None
+        assert restored.result is not None
+        assert restored.result.run_type.value == "PAPER"
+        assert stored == legacy_document
+        assert "run_type" not in stored["data"]["result"]
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()

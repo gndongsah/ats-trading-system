@@ -21,6 +21,7 @@ from src.domain.models import (
     TradeSide,
     TradingStyle,
 )
+from src.run_type import RunType
 
 DECISION_TIME = datetime(2026, 1, 2, 15, 0, tzinfo=UTC)
 
@@ -116,6 +117,7 @@ def make_complete_trade() -> JournalEntry:
     )
     result = TradeResult(
         plan_id=plan.id,
+        run_type=RunType.PAPER,
         closed_at=position.as_of + timedelta(hours=4),
         realized_pnl=Decimal(250),
         r_multiple=Decimal("2.5"),

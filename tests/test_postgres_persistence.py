@@ -324,7 +324,11 @@ def test_postgres_persists_and_reloads_closed_trade_in_fresh_session(
 
     with factory() as session:
         restored = JournalRepository(session).get_by_trade_id(entry.plan.trade_id)
+        result_row = session.get(TradeResultRecord, entry.result.id)
 
+    assert result_row is not None
+    assert result_row.run_type == "PAPER"
+    assert result_row.result_data["run_type"] == "PAPER"
     assert restored == entry
     assert restored is not None
     assert restored.plan.trade_id == entry.plan.trade_id

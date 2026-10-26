@@ -18,6 +18,8 @@ from pydantic import (
     model_validator,
 )
 
+from src.run_type import RunType
+
 ZERO = Decimal(0)
 ONE = Decimal(1)
 
@@ -48,10 +50,8 @@ class RiskModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
-class PortfolioRunType(StrEnum):
-    LIVE = "LIVE"
-    PAPER = "PAPER"
-    REPLAY = "REPLAY"
+# Compatibility name retained for ATS-027 callers.
+PortfolioRunType = RunType
 
 
 class PortfolioValueProvenance(RiskModel):

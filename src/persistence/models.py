@@ -144,7 +144,14 @@ class PositionSnapshotRecord(Base):
 
 class TradeResultRecord(Base):
     __tablename__ = "ats_trade_results"
-    __table_args__ = (UniqueConstraint("plan_id", name="uq_ats_result_plan"),)
+    __table_args__ = (
+        UniqueConstraint("plan_id", name="uq_ats_result_plan"),
+        CheckConstraint(
+            "run_type IN ('LIVE', 'PAPER', 'REPLAY')",
+            name="ck_ats_trade_results_run_type",
+        ),
+        Index("ix_ats_trade_results_run_type", "run_type"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     trade_id: Mapped[UUID] = mapped_column(
@@ -153,6 +160,7 @@ class TradeResultRecord(Base):
     plan_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("ats_trade_plans.id"), nullable=False
     )
+    run_type: Mapped[str] = mapped_column(String(16), nullable=False, default="PAPER")
     result_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
 
 

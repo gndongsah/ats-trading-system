@@ -23,6 +23,7 @@ from src.domain.models import (
     TradingStyle,
     ValidationStage,
 )
+from src.run_type import RunType
 
 __all__ = [
     "EvidenceItem",
@@ -38,6 +39,7 @@ __all__ = [
     "PositionSnapshot",
     "Regime",
     "RiskIntent",
+    "RunType",
     "ScoreContribution",
     "ScoreSnapshot",
     "SecurityRef",
