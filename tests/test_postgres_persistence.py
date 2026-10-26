@@ -41,7 +41,6 @@ from src.evidence_verification import (
     score_contribution_from_eligibility,
 )
 from src.historical_replay import HistoricalReplayService, ResearchReplayRequirement
-from src.market_data import Bar, MarketDataStore, MarketEvent, ReplayRequirement
 from src.layer3 import (
     AuthenticatedAccountPrincipal,
     BrokerFillEvent,
@@ -54,6 +53,7 @@ from src.layer3 import (
     VerifiedBrokerOrderUpdate,
     VerifiedBrokerStopConfirmation,
 )
+from src.market_data import Bar, MarketDataStore, MarketEvent, ReplayRequirement
 from src.persistence.evidence_repository import EvidenceRepository
 from src.persistence.loss_state_provider import RepositoryLossLockProvider
 from src.persistence.loss_state_repository import (
