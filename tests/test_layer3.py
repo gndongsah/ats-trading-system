@@ -883,8 +883,9 @@ def test_publish_state_persists_richer_contract_and_snapshot_wrapper_stays_compa
 ):
     engine, factory, service, account_id, _ = create_service_and_db(tmp_path)
     try:
-        richer = portfolio_snapshot(account_id).model_copy(
-            update={
+        richer = PortfolioState.model_validate(
+            portfolio_snapshot(account_id).model_dump(mode="python")
+            | {
                 "version": 2,
                 "run_type": PortfolioRunType.REPLAY,
                 "source": "synthetic-replay",
