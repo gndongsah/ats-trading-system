@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "ATS: Debug API",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "src",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "ATS: Debug current pytest file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "${file}",
+        "-v"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
