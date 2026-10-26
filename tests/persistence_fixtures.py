@@ -23,7 +23,6 @@ from src.domain.models import (
 )
 from src.run_type import RunType
 
-
 DECISION_TIME = datetime(2026, 1, 2, 15, 0, tzinfo=UTC)
 
 
