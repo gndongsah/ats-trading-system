@@ -1,0 +1,109 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ATS: Install Dev",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-m",
+        "pip",
+        "install",
+        "-e",
+        ".[dev]"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "ATS: Ruff",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-m",
+        "ruff",
+        "check",
+        "."
+      ],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "ATS: Pytest",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-m",
+        "pytest",
+        "-v"
+      ],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "ATS: Pre-PR Validation",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "ATS: Ruff",
+        "ATS: Pytest"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "ATS: API",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-m",
+        "src"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "ATS: Docker Up",
+      "type": "shell",
+      "command": "docker",
+      "args": [
+        "compose",
+        "up",
+        "--build"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "ATS: Docker Stop",
+      "type": "shell",
+      "command": "docker",
+      "args": [
+        "compose",
+        "stop"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "ATS: Alembic Upgrade",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-m",
+        "alembic",
+        "upgrade",
+        "head"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "ATS: PostgreSQL Persistence Tests",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-m",
+        "pytest",
+        "tests/test_postgres_persistence.py",
+        "-v"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}
