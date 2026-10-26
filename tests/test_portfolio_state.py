@@ -86,9 +86,7 @@ def state(**overrides) -> PortfolioState:
                 gross_notional=Decimal(15000),
             ),
         ),
-        "factor_exposure": (
-            ExposureSummary(key="ai_capex", risk_r=Decimal("0.75")),
-        ),
+        "factor_exposure": (ExposureSummary(key="ai_capex", risk_r=Decimal("0.75")),),
         "daily_realized_r": Decimal("-0.5"),
         "weekly_realized_r": Decimal("1.5"),
         "validation_stage": "experimental",
