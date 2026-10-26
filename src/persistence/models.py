@@ -153,6 +153,7 @@ class TradeResultRecord(Base):
     plan_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("ats_trade_plans.id"), nullable=False
     )
+    run_type: Mapped[str] = mapped_column(String(16), nullable=False, default="PAPER")
     result_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
 
 
