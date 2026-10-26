@@ -125,3 +125,16 @@ No tool may create a second path around the Risk Engine.
 10. Reconcile Notion and select the next story.
 
 This loop is intentionally boring: it keeps product scope, code, architecture, and local work synchronized.
+
+## ChatGPT command protocol
+
+Use these short commands in the ATS ChatGPT project:
+
+- **execute next** — inspect Notion sprint/backlog + GitHub main/CI, choose the next dependency-ready story, and implement or prepare the exact next change.
+- **review PR <number>** — review diff, tests, unresolved threads, architecture impact, and Notion acceptance criteria.
+- **merged done** — verify the accepted GitHub tree/CI, reconcile Notion status, and identify the next dependency-ready item.
+- **sync ATS** — reconcile Notion, GitHub architecture/docs, current PR/branch state, and the working plan in ChatGPT.
+- **architecture check** — compare the proposed change against Architecture Baseline v1.1 and flag ADR/backlog/test impacts before implementation.
+- **sprint status** — summarize completed, in-progress, blocked, and next work from Notion plus GitHub evidence.
+
+When local action is required, ChatGPT should give VS Code-first steps using the committed Tasks/launch configurations rather than inventing a separate local workflow.
