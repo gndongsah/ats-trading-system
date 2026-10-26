@@ -5,6 +5,18 @@ The ATS foundation loads its scoring weights and decision thresholds from
 single source of truth for both Layer 0 Market Opportunity and Layer 1
 Discovery.
 
+## Architecture and delivery workflow
+
+- [Architecture baseline v1.1](docs/architecture/baseline-v1.1.md)
+- [Architecture documentation index](docs/architecture/README.md)
+- [ChatGPT + Notion + GitHub + VS Code workflow](docs/WORKFLOW.md)
+
+The implementation workflow treats Notion as the product/backlog source of truth,
+GitHub `main` as the accepted engineering record, VS Code as the local implementation
+cockpit, and this ChatGPT project as the planning/review/orchestration layer. Material
+architecture changes must update the repository architecture docs, Notion ADR/backlog,
+and relevant tests before the change is considered complete.
+
 ## Requirements
 
 - Python 3.12 or newer
