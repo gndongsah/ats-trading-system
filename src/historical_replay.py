@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from hashlib import sha256
-from typing import Generic, Literal, TypeVar
+from typing import Literal
 
 from pydantic import Field, StrictInt, field_validator, model_validator
 
@@ -17,8 +17,6 @@ from src.market_data import (
     ReplayUnavailable,
 )
 from src.persistence.evidence_repository import EvidenceRepository
-
-T = TypeVar("T")
 
 
 class ResearchReplayRequirement(FrozenModel):
@@ -166,7 +164,7 @@ class HistoricalReplayService:
         )
 
 
-class HistoricalProposalGate(Generic[T]):
+class HistoricalProposalGate[T]:
     """Invoke proposal creation only after unified historical replay succeeds."""
 
     def __init__(self, replay_service: HistoricalReplayService) -> None:
