@@ -166,12 +166,8 @@ def test_delayed_news_is_invisible_until_both_available_and_ingested():
         with Session(engine) as session:
             repository = EvidenceRepository(session)
             assert repository.list_sources_as_of(as_of=T0) == ()
-            assert repository.list_sources_as_of(
-                as_of=T0 + timedelta(minutes=8)
-            ) == ()
-            visible = repository.list_sources_as_of(
-                as_of=T0 + timedelta(minutes=12)
-            )
+            assert repository.list_sources_as_of(as_of=T0 + timedelta(minutes=8)) == ()
+            visible = repository.list_sources_as_of(as_of=T0 + timedelta(minutes=12))
         assert len(visible) == 1
         assert visible[0].source_id == news.source_id
     finally:
