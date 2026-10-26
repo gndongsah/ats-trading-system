@@ -217,9 +217,15 @@ class SourceDocumentRecord(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     source_type: Mapped[str] = mapped_column(String(64), nullable=False)
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
-    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     source_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
 
 
