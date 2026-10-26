@@ -35,6 +35,13 @@ def upgrade() -> None:
         sa.Column("ingested_at", sa.DateTime(timezone=True), nullable=True),
     )
 
+    # ATS-005 already protects this table with an append-only UPDATE trigger.
+    # The migration owner temporarily disables only that trigger so existing
+    # immutable JSON can be projected into the new queryable columns.
+    op.execute(
+        "ALTER TABLE ats_source_documents "
+        "DISABLE TRIGGER ats_source_documents_append_only"
+    )
     op.execute(
         """
         UPDATE ats_source_documents
@@ -51,6 +58,10 @@ def upgrade() -> None:
                 source_data ->> 'observed_at'
             )::timestamptz
         """
+    )
+    op.execute(
+        "ALTER TABLE ats_source_documents "
+        "ENABLE TRIGGER ats_source_documents_append_only"
     )
 
     for column in (
