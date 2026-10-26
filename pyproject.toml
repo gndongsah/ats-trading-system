@@ -15,10 +15,12 @@ dependencies = [
     "uvicorn>=0.30",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
-    "alembic>=1.13"
+    "alembic>=1.13",
+    "exchange-calendars==4.13.1"
 ]
 
 [project.optional-dependencies]
+webull = ["webull-openapi-python-sdk==3.0.4", "keyring>=25"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",

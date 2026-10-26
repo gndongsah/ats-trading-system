@@ -5,7 +5,14 @@ from pathlib import Path
 from typing import Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 PLAYBOOK_PATH = Path(__file__).resolve().parent.parent / "playbook" / "playbook_v3.yaml"
 
@@ -18,6 +25,13 @@ class FactorConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     weight: float = Field(gt=0, allow_inf_nan=False)
+
+    @field_validator("weight")
+    @classmethod
+    def reject_boolean_weights(cls, value: float) -> float:
+        if isinstance(value, bool):
+            raise TypeError("weight must be numeric, not boolean")
+        return value
 
 
 class ScoreSection(BaseModel):

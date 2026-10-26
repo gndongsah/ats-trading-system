@@ -38,7 +38,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -e ".[dev,webull]"
 
       - name: Ruff lint
         run: python -m ruff check .
@@ -50,11 +50,23 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python -m pytest tests/test_postgres_persistence.py -q -rs | tee postgres-results.txt
+          python -m pytest tests/test_postgres_persistence.py -q -rs --fail-on-skip | tee postgres-results.txt
           if grep -Eq '[0-9]+ skipped|SKIPPED' postgres-results.txt; then
             echo "PostgreSQL tests were skipped"
             exit 1
           fi
 
       - name: Full test suite
-        run: python -m pytest -q -rs
+        run: python -m pytest -q -rs --fail-on-skip
+
+      - name: Replay simulation acceptance report
+        if: always()
+        run: python -m src.replay_acceptance --output replay-acceptance.json
+
+      - name: Upload replay acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-acceptance-report
+          path: replay-acceptance.json
+          if-no-files-found: warn
