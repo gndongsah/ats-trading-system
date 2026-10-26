@@ -1,3 +1,4 @@
+from src.run_type import RunType
 from src.domain.evidence import EvidenceItem, SourceDocument
 from src.domain.models import (
     EvidenceRef,
@@ -38,6 +39,7 @@ __all__ = [
     "PositionSnapshot",
     "Regime",
     "RiskIntent",
+    "RunType",
     "ScoreContribution",
     "ScoreSnapshot",
     "SecurityRef",
