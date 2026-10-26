@@ -128,6 +128,19 @@ remains unconditionally disabled.
 
 See [docs/ATS-027-portfolio-state.md](docs/ATS-027-portfolio-state.md).
 
+## ATS-028 result isolation
+
+`RunType` in `src/run_type.py` is the shared identity for LIVE, PAPER and
+REPLAY evidence. `TradeResult` persists that identity; legacy outcomes default
+and migrate to PAPER so they cannot silently become live validation evidence.
+
+Outcome analytics in `src/outcome_analytics.py` are LIVE-only by default.
+Including PAPER or REPLAY requires an explicit `OutcomeScope`. The same
+boundary exposes live-validation eligibility without implementing future
+promotion/autonomy logic.
+
+See [docs/ATS-028-run-type-isolation.md](docs/ATS-028-run-type-isolation.md).
+
 ## ATS-004 PostgreSQL journal persistence
 
 SQLAlchemy 2.x mappings live in `src/persistence/models.py`; the
