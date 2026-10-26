@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Generic, Literal, TypeVar
 
-from pydantic import ConfigDict, Field, StrictInt, field_validator
+from pydantic import Field, StrictInt, field_validator
 
 from src.domain.evidence import SourceDocument
 from src.domain.models import _require_utc
@@ -141,8 +141,6 @@ class HistoricalReplayService:
 
 class HistoricalProposalGate(Generic[T]):
     """Invoke proposal creation only after unified historical replay succeeds."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, replay_service: HistoricalReplayService) -> None:
         self._replay_service = replay_service
