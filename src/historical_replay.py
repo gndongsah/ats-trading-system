@@ -61,6 +61,13 @@ class HistoricalReplayContext(FrozenModel):
     def context_is_point_in_time_coherent(self) -> "HistoricalReplayContext":
         if self.market.as_of != self.as_of:
             raise ValueError("market replay timestamp must match historical context")
+        for observation in self.market.observations:
+            if (
+                observation.event.event_time > self.as_of
+                or observation.event.available_at > self.as_of
+                or observation.ingested_at > self.as_of
+            ):
+                raise ValueError("historical context contains future market data")
         for selection in self.research:
             requirement = selection.requirement
             if len(selection.sources) < requirement.min_sources:
