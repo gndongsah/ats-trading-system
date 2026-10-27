@@ -39,9 +39,7 @@ def parse_results(path: Path, returncode: int) -> dict:
     properties = case.find("properties")
     if properties is not None:
         values = [
-            item.get("value")
-            for item in properties
-            if item.get("name") == "evidence"
+            item.get("value") for item in properties if item.get("name") == "evidence"
         ]
         if len(values) == 1:
             evidence = json.loads(values[0])
