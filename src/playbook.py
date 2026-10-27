@@ -194,9 +194,7 @@ class SetupScoreConfig(ScoreSection):
             "liquidity_volume_confirmation": 15.0,
             "earnings_distance_safety": 10.0,
         }
-        actual_weights = {
-            name: factor.weight for name, factor in self.factors.items()
-        }
+        actual_weights = {name: factor.weight for name, factor in self.factors.items()}
         if any(
             not math.isclose(actual_weights[name], weight, rel_tol=0, abs_tol=1e-9)
             for name, weight in expected_weights.items()
