@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
 from decimal import Decimal, localcontext
+from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
@@ -23,7 +23,6 @@ from src.market_data import (
     Bar,
     MarketEvent,
     Observation,
-    ReplayRequirement,
     ReplaySnapshot,
 )
 from src.regime import RegimeClassification
