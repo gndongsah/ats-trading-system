@@ -555,7 +555,6 @@ class TriageExperimentRecord(Base):
     )
 
 
-
 class AgentEvaluationRecord(Base):
     __tablename__ = "ats_agent_evaluations"
     __table_args__ = (
