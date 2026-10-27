@@ -263,6 +263,10 @@ def run(
 def test_win_loss_flat_are_deterministic_replay_results(exit_price, label, sign):
     outcome = run(exit_price)
 
+    assert outcome.decision_at == AS_OF
+    assert outcome.trigger_type.value == "breakout_retest"
+    assert outcome.regime is Regime.RISK_ON
+    assert outcome.setup_score == Decimal(70)
     assert outcome.trade_result.run_type is RunType.REPLAY
     assert outcome.trade_result.outcome == label
     assert (outcome.net_pnl > 0) - (outcome.net_pnl < 0) == sign
