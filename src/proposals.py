@@ -178,7 +178,9 @@ class ProposalExecutionGate:
         if fresh_risk.plan_id != proposal.plan.id:
             raise PermissionError("fresh risk result references the wrong plan")
         if fresh_risk.checked_at < execution_authorization.authorized_at:
-            raise PermissionError("risk must be rechecked after execution authorization")
+            raise PermissionError(
+                "risk must be rechecked after execution authorization"
+            )
         if fresh_risk.checked_at > at:
             raise ValueError("fresh risk check cannot occur after execution time")
         if fresh_risk.decision is RiskDecision.DENY:
