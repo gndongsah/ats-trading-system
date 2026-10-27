@@ -264,20 +264,23 @@ class DeterministicBacktestHarness:
             raise BacktestUnavailable("UNSUPPORTED_SIDE:SHORT")
 
         regime = trigger.setup_score.regime.regime
-        sizing_result = size_long_equity_position(
-            equity=sizing.equity,
-            risk_fraction=sizing.risk_fraction,
-            entry=trigger.trigger_level,
-            stop=trigger.invalidation_level,
-            available_buying_power=sizing.available_buying_power,
-            regime=regime,
-            side=trigger.side,
-            instrument_type="equity",
-            leverage=Decimal(1),
-            fractional_shares=False,
-            special_setup=False,
-            explicit_regime_multiplier=sizing.explicit_regime_multiplier,
-        )
+        try:
+            sizing_result = size_long_equity_position(
+                equity=sizing.equity,
+                risk_fraction=sizing.risk_fraction,
+                entry=trigger.trigger_level,
+                stop=trigger.invalidation_level,
+                available_buying_power=sizing.available_buying_power,
+                regime=regime,
+                side=trigger.side,
+                instrument_type="equity",
+                leverage=Decimal(1),
+                fractional_shares=False,
+                special_setup=False,
+                explicit_regime_multiplier=sizing.explicit_regime_multiplier,
+            )
+        except (TypeError, ValueError) as error:
+            raise BacktestUnavailable(f"SIZING_INPUT:{error}") from error
         if (
             sizing_result.decision is SizingDecision.DENY
             or sizing_result.quantity <= 0
