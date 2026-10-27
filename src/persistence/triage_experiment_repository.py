@@ -93,8 +93,7 @@ class TriageExperimentRepository:
             )
         ).all()
         return tuple(
-            TriagePrediction.model_validate(row.prediction_data)
-            for row in rows
+            TriagePrediction.model_validate(row.prediction_data) for row in rows
         )
 
     def list_outcomes(self, *, experiment_id: UUID) -> dict[str, TriageOutcome]:
