@@ -208,6 +208,18 @@ class SetupScoreConfig(ScoreSection):
             self.thresholds["unproven_size"], 50.0, rel_tol=0, abs_tol=1e-9
         ):
             raise ValueError("setup score thresholds must be 70 and 50")
+        screen = self.swing_long_screen
+        if (
+            screen.min_avg_daily_volume != 500_000
+            or not math.isclose(
+                screen.max_extension_pct_50dma, 10.0, rel_tol=0, abs_tol=1e-9
+            )
+            or screen.min_days_to_earnings != 10
+        ):
+            raise ValueError(
+                "swing-long screen must match Playbook v3 limits: "
+                "500k volume, 10% extension, 10-day earnings window"
+            )
         return self
 
 
