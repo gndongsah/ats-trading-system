@@ -96,7 +96,9 @@ class Ema21PullbackInput(TriggerModel):
     @model_validator(mode="after")
     def invalidation_is_below_swing_low(self) -> "Ema21PullbackInput":
         if self.swing_low >= self.ema21_level:
-            raise ValueError("21EMA pullback requires swing low below EMA trigger level")
+            raise ValueError(
+                "21EMA pullback requires swing low below EMA trigger level"
+            )
         if self.invalidation_level >= self.swing_low:
             raise ValueError("21EMA pullback invalidation must be below swing low")
         return self
@@ -121,7 +123,9 @@ class BreakdownShortInput(TriggerModel):
     @model_validator(mode="after")
     def invalidation_is_above_failed_bounce(self) -> "BreakdownShortInput":
         if self.failed_bounce_high <= self.swing_low:
-            raise ValueError("breakdown short requires failed-bounce high above swing low")
+            raise ValueError(
+                "breakdown short requires failed-bounce high above swing low"
+            )
         if self.invalidation_level <= self.failed_bounce_high:
             raise ValueError("breakdown short invalidation must be above failed bounce")
         return self
@@ -146,9 +150,15 @@ class SwingTriggerResult(TriggerModel):
 
     @model_validator(mode="after")
     def trigger_geometry_matches_side(self) -> "SwingTriggerResult":
-        if self.side is TradeSide.LONG and self.invalidation_level >= self.trigger_level:
+        if (
+            self.side is TradeSide.LONG
+            and self.invalidation_level >= self.trigger_level
+        ):
             raise ValueError("long trigger requires invalidation below trigger")
-        if self.side is TradeSide.SHORT and self.invalidation_level <= self.trigger_level:
+        if (
+            self.side is TradeSide.SHORT
+            and self.invalidation_level <= self.trigger_level
+        ):
             raise ValueError("short trigger requires invalidation above trigger")
         return self
 
