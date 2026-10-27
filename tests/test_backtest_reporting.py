@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from uuid import NAMESPACE_URL, uuid5
 
 import pytest
@@ -333,3 +333,14 @@ def test_report_models_are_immutable():
         report.outcome_count = 0
     with pytest.raises(ValidationError):
         report.overall.overall.trade_count = 0
+
+
+def test_report_is_independent_of_ambient_decimal_precision():
+    baseline = build_backtest_performance_report(sample_outcomes())
+
+    with localcontext() as decimal_context:
+        decimal_context.prec = 6
+        repeated = build_backtest_performance_report(sample_outcomes())
+
+    assert repeated == baseline
+    assert repeated.digest == baseline.digest
