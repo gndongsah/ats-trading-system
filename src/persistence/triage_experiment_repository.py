@@ -9,6 +9,13 @@ from src.persistence.models import TriageExperimentRecord
 from src.persistence.repository import PersistenceConflict
 
 
+def _as_utc_from_storage(value: datetime) -> datetime:
+    """SQLite may strip tzinfo; persisted experiment clocks are UTC by contract."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 class TriageExperimentRepository:
     """Persist paired ATS-020 predictions and later calibration outcomes."""
 
@@ -61,7 +68,7 @@ class TriageExperimentRepository:
         if not rows:
             raise LookupError("no triage predictions found for experiment/case")
         for row in rows:
-            if outcome_resolved_at < row.observed_at:
+            if outcome_resolved_at < _as_utc_from_storage(row.observed_at):
                 raise ValueError("outcome cannot resolve before prediction is observed")
             if row.outcome_label is not None:
                 if (
@@ -110,6 +117,6 @@ class TriageExperimentRepository:
             outcomes[row.case_id] = TriageOutcome(
                 case_id=row.case_id,
                 actual_label=row.outcome_label,
-                resolved_at=row.outcome_resolved_at,
+                resolved_at=_as_utc_from_storage(row.outcome_resolved_at),
             )
         return outcomes
