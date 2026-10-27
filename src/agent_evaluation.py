@@ -97,7 +97,9 @@ def _classification_metrics(
         if outcome.resolved_at < prediction.observed_at:
             raise ValueError("outcome cannot resolve before prediction is observed")
 
-        predicted_positive = prediction.predicted_label.casefold() == normalized_positive
+        predicted_positive = (
+            prediction.predicted_label.casefold() == normalized_positive
+        )
         actual_positive = outcome.actual_label.casefold() == normalized_positive
         observations += 1
         if predicted_positive and actual_positive:
