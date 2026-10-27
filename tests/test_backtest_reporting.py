@@ -255,7 +255,7 @@ def test_non_replay_outcome_is_rejected():
 def test_backtest_result_integrity_mismatches_are_rejected():
     value = sample_outcomes()[0]
     bad_result = value.trade_result.model_copy(
-        update={"r_multiple": Decimal("99")}
+        update={"r_multiple": Decimal(99)}
     )
     corrupted = value.model_copy(update={"trade_result": bad_result})
 
