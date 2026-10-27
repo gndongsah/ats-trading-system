@@ -33,7 +33,9 @@ def test_invalid_playbook_fails_with_clear_validation_error(tmp_path):
         load_playbook(invalid_path)
 
 
-def test_invalid_regime_playbook_rejects_unknown_signal_and_incomplete_precedence(tmp_path):
+def test_invalid_regime_playbook_rejects_unknown_signal_and_incomplete_precedence(
+    tmp_path,
+):
     playbook = yaml.safe_load(PLAYBOOK_PATH.read_text(encoding="utf-8"))
     playbook["regime"]["rules"]["risk_on"]["requires"].append("mystery_signal")
     invalid_signal_path = tmp_path / "invalid-regime-signal.yaml"
