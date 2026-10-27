@@ -543,7 +543,9 @@ class TriageExperimentRecord(Base):
     probability: Mapped[Decimal] = mapped_column(Numeric(8, 7), nullable=False)
     model_name: Mapped[str] = mapped_column(String(128), nullable=False)
     model_version: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    observed_at: Mapped[datetime] = mapped_column(\n        DateTime(timezone=True), nullable=False\n    )
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     outcome_label: Mapped[str | None] = mapped_column(String(128), nullable=True)
     outcome_resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
