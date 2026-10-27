@@ -13,7 +13,7 @@ from src.domain.models import (
     ScoreContribution,
     _require_utc,
 )
-from src.engine import score_discovery, validate_factor_scores
+from src.engine import score_discovery, score_market_opportunity, validate_factor_scores
 from src.playbook import PLAYBOOK, PlaybookConfig, ScoreSection
 
 
@@ -71,6 +71,14 @@ class ScoringEligibility(BaseModel):
 
 
 class EvidenceScoredDiscovery(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    score: float
+    allowed_factor_scores: dict[str, Decimal]
+    eligibility: dict[str, ScoringEligibility]
+
+
+class EvidenceScoredMarketOpportunity(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     score: float
@@ -298,6 +306,51 @@ def score_discovery_with_evidence(
         {factor: float(value) for factor, value in allowed_scores.items()}, playbook
     )
     return EvidenceScoredDiscovery(
+        score=score,
+        allowed_factor_scores=allowed_scores,
+        eligibility=eligibility,
+    )
+
+
+def score_market_opportunity_with_evidence(
+    *,
+    factor_scores: Mapping[str, float | Decimal],
+    evidence_by_factor: Mapping[str, tuple[EvidenceItem, ...]],
+    sources: Mapping[UUID, SourceDocument],
+    subject: str,
+    decision_at: datetime,
+    unresolved_evidence_by_factor: Mapping[str, int] | None = None,
+    playbook: PlaybookConfig = PLAYBOOK,
+) -> EvidenceScoredMarketOpportunity:
+    if any(isinstance(value, bool) for value in factor_scores.values()):
+        raise TypeError("Market Opportunity factor scores must be numeric, not boolean")
+    normalized_scores = {
+        factor: float(value) for factor, value in factor_scores.items()
+    }
+    validate_factor_scores(normalized_scores, playbook.market_opportunity)
+    eligibility = {
+        factor: evaluate_scoring_eligibility(
+            subject=subject,
+            factor=factor,
+            requested_contribution=Decimal(str(factor_scores[factor])),
+            decision_at=decision_at,
+            evidence_items=evidence_by_factor.get(factor, ()),
+            sources=sources,
+            unresolved_evidence_count=(unresolved_evidence_by_factor or {}).get(
+                factor, 0
+            ),
+            section=playbook.market_opportunity,
+            playbook=playbook,
+        )
+        for factor in factor_scores
+    }
+    allowed_scores = {
+        factor: result.allowed_contribution for factor, result in eligibility.items()
+    }
+    score = score_market_opportunity(
+        {factor: float(value) for factor, value in allowed_scores.items()}, playbook
+    )
+    return EvidenceScoredMarketOpportunity(
         score=score,
         allowed_factor_scores=allowed_scores,
         eligibility=eligibility,
