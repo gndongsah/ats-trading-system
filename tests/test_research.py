@@ -239,12 +239,8 @@ def test_layer01_scoring_uses_verified_evidence_and_preserves_thesis_breaker():
         source_type="earnings_call",
         content_hash="b" * 64,
     )
-    market_evidence = verified_evidence(
-        market_source, "structural_demand_growth"
-    )
-    discovery_evidence = verified_evidence(
-        discovery_source, "demand_acceleration"
-    )
+    market_evidence = verified_evidence(market_source, "structural_demand_growth")
+    discovery_evidence = verified_evidence(discovery_source, "demand_acceleration")
     market_scores = zero_scores(PLAYBOOK.market_opportunity)
     discovery_scores = zero_scores(PLAYBOOK.discovery)
     market_scores["structural_demand_growth"] = 100.0
@@ -255,13 +251,9 @@ def test_layer01_scoring_uses_verified_evidence_and_preserves_thesis_breaker():
         decision_at=DECISION_AT,
         thesis_breaker="Exit if demand growth reverses for two consecutive quarters.",
         market_factor_scores=market_scores,
-        market_evidence_by_factor={
-            "structural_demand_growth": (market_evidence,)
-        },
+        market_evidence_by_factor={"structural_demand_growth": (market_evidence,)},
         discovery_factor_scores=discovery_scores,
-        discovery_evidence_by_factor={
-            "demand_acceleration": (discovery_evidence,)
-        },
+        discovery_evidence_by_factor={"demand_acceleration": (discovery_evidence,)},
         sources={
             market_source.id: market_source,
             discovery_source.id: discovery_source,
