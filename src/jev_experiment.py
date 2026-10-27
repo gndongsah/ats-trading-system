@@ -107,7 +107,7 @@ class PairedExperimentResult(BaseModel):
 
     @model_validator(mode="after")
     def validate_pair(self) -> "PairedExperimentResult":
-        if self.llm_only.case_id != self.case_id or self.llm_jev.case_id != self.case_id:
+        if (\n            self.llm_only.case_id != self.case_id\n            or self.llm_jev.case_id != self.case_id\n        ):
             raise ValueError("paired predictions must share the same case_id")
         if self.llm_only.experiment_id != self.llm_jev.experiment_id:
             raise ValueError("paired predictions must share the same experiment_id")
