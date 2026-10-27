@@ -141,6 +141,8 @@ class ProposalExecutionGate:
         reference_price: Decimal,
         idempotency_key: str,
         at: datetime,
+        market_data_observed_at: datetime,
+        orders_submitted_today: int,
     ) -> BrokerSubmissionReceipt:
         at = _require_utc(at)
         if approval.proposal_id != proposal.id:
