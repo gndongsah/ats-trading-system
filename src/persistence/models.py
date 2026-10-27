@@ -580,6 +580,4 @@ class AgentEvaluationRecord(Base):
     )
     as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     observations: Mapped[int] = mapped_column(Integer, nullable=False)
-    summary_data: Mapped[dict[str, Any]] = mapped_column(
-        JSON_DOCUMENT, nullable=False
-    )
+    summary_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
