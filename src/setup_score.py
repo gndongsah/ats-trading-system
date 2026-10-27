@@ -17,7 +17,6 @@ from src.domain.models import TradeSide, TradingStyle, _require_utc
 from src.playbook import PLAYBOOK, SetupScoreConfig
 from src.regime import RegimeClassification
 
-
 ZERO = Decimal(0)
 
 
