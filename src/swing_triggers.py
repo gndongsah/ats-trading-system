@@ -14,7 +14,7 @@ from pydantic import (
     model_validator,
 )
 
-from src.domain.models import TradeSide, _require_utc
+from src.domain.models import TradeSide, TradingStyle, _require_utc
 from src.playbook import PLAYBOOK, SwingTriggerConfig
 from src.setup_score import SetupActionability, SetupScoreResult
 
@@ -40,6 +40,8 @@ class SwingTriggerActionability(StrEnum):
 class SwingTriggerFailure(StrEnum):
     SETUP_SCORE_BELOW_SWING_MINIMUM = "setup_score_below_swing_minimum"
     SETUP_NOT_ACTIONABLE = "setup_not_actionable"
+    SETUP_NOT_SWING = "setup_not_swing"
+    SETUP_SIDE_MISMATCH = "setup_side_mismatch"
 
     FLAT_BASE_NOT_CLEARED = "flat_base_not_cleared"
     VOLUME_NOT_RISING = "volume_not_rising"
@@ -156,11 +158,16 @@ def _setup_failures(
     *,
     as_of: datetime,
     config: SwingTriggerConfig,
+    expected_side: TradeSide,
 ) -> list[SwingTriggerFailure]:
     if setup.as_of != as_of:
         raise ValueError("setup score timestamp must match trigger timestamp")
 
     failures: list[SwingTriggerFailure] = []
+    if setup.trading_style is not TradingStyle.SWING:
+        failures.append(SwingTriggerFailure.SETUP_NOT_SWING)
+    if setup.side is not expected_side:
+        failures.append(SwingTriggerFailure.SETUP_SIDE_MISMATCH)
     minimum = Decimal(str(config.min_setup_score))
     if setup.score < minimum:
         failures.append(SwingTriggerFailure.SETUP_SCORE_BELOW_SWING_MINIMUM)
@@ -189,6 +196,7 @@ def evaluate_breakout_retest(
         setup,
         as_of=candidate.as_of,
         config=selected_config,
+        expected_side=TradeSide.LONG,
     )
     if not candidate.cleared_flat_base:
         failures.append(SwingTriggerFailure.FLAT_BASE_NOT_CLEARED)
@@ -230,6 +238,7 @@ def evaluate_ema21_pullback(
         setup,
         as_of=candidate.as_of,
         config=selected_config,
+        expected_side=TradeSide.LONG,
     )
     if not candidate.steady_uptrend:
         failures.append(SwingTriggerFailure.NOT_STEADY_UPTREND)
@@ -270,6 +279,7 @@ def evaluate_breakdown_short(
         setup,
         as_of=candidate.as_of,
         config=selected_config,
+        expected_side=TradeSide.SHORT,
     )
     if not candidate.below_50dma:
         failures.append(SwingTriggerFailure.NOT_BELOW_50DMA)
