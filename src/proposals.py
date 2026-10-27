@@ -127,9 +127,11 @@ class ProposalExecutionGate:
         *,
         risk_checker: ProposalRiskChecker,
         execution_service: ExecutionService,
+        operational_guard: OperationalGuard,
     ) -> None:
         self._risk_checker = risk_checker
         self._execution_service = execution_service
+        self._operational_guard = operational_guard
 
     def execute(
         self,
