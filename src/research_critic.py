@@ -36,8 +36,13 @@ class CriticFinding(BaseModel):
 
     @model_validator(mode="after")
     def require_evidence_for_material_findings(self) -> "CriticFinding":
-        if self.disposition is not CriticDisposition.INSUFFICIENT and not self.evidence:
-            raise ValueError("supported or contradicted findings require evidence references")
+        if (
+            self.disposition is not CriticDisposition.INSUFFICIENT
+            and not self.evidence
+        ):
+            raise ValueError(
+                "supported or contradicted findings require evidence references"
+            )
         return self
 
 
