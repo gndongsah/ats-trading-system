@@ -15,6 +15,12 @@ from src.execution import (
     BrokerSubmissionRequest,
     ExecutionService,
 )
+from src.execution_authorization import (
+    AutonomyPolicy,
+    ExecutionAuthorization,
+    authorize_from_human_approval,
+    validate_execution_authorization,
+)
 from src.operational_guards import OperationalGuard, OperationalGuardContext
 from src.portfolio import RiskDecision
 from src.run_type import RunType
@@ -115,6 +121,19 @@ class HumanApproval(BaseModel):
         return _require_utc(value)
 
 
+def execution_authorization_from_human_approval(
+    approval: HumanApproval,
+) -> ExecutionAuthorization:
+    if approval.decision is not ApprovalDecision.APPROVE:
+        raise PermissionError("rejected proposal cannot authorize execution")
+    return authorize_from_human_approval(
+        proposal_id=approval.proposal_id,
+        proposal_fingerprint=approval.proposal_fingerprint,
+        approver_identity=approval.approver_identity,
+        approved_at=approval.decided_at,
+    )
+
+
 class ProposalRiskChecker(Protocol):
     def check(self, proposal: TradeProposal, at: datetime) -> ProposalRiskSnapshot: ...
 
@@ -128,16 +147,18 @@ class ProposalExecutionGate:
         risk_checker: ProposalRiskChecker,
         execution_service: ExecutionService,
         operational_guard: OperationalGuard,
+        autonomy_policy: AutonomyPolicy | None = None,
     ) -> None:
         self._risk_checker = risk_checker
         self._execution_service = execution_service
         self._operational_guard = operational_guard
+        self._autonomy_policy = autonomy_policy
 
     def execute(
         self,
         *,
         proposal: TradeProposal,
-        approval: HumanApproval,
+        execution_authorization: ExecutionAuthorization,
         reference_price: Decimal,
         idempotency_key: str,
         at: datetime,
@@ -145,20 +166,21 @@ class ProposalExecutionGate:
         orders_submitted_today: int,
     ) -> BrokerSubmissionReceipt:
         at = _require_utc(at)
-        if approval.proposal_id != proposal.id:
-            raise PermissionError("approval does not belong to this proposal")
-        if approval.proposal_fingerprint != proposal.fingerprint:
-            raise PermissionError("approval does not match the immutable proposal")
-        if approval.decision is not ApprovalDecision.APPROVE:
-            raise PermissionError("proposal is not approved")
-        if approval.decided_at > at:
-            raise ValueError("execution cannot predate human approval")
+        validate_execution_authorization(
+            authorization=execution_authorization,
+            proposal_id=proposal.id,
+            proposal_fingerprint=proposal.fingerprint,
+            at=at,
+            autonomy_policy=self._autonomy_policy,
+        )
 
         fresh_risk = self._risk_checker.check(proposal, at)
         if fresh_risk.plan_id != proposal.plan.id:
             raise PermissionError("fresh risk result references the wrong plan")
-        if fresh_risk.checked_at < approval.decided_at:
-            raise PermissionError("risk must be rechecked after human approval")
+        if fresh_risk.checked_at < execution_authorization.authorized_at:
+            raise PermissionError(
+                "risk must be rechecked after execution authorization"
+            )
         if fresh_risk.checked_at > at:
             raise ValueError("fresh risk check cannot occur after execution time")
         if fresh_risk.decision is RiskDecision.DENY:

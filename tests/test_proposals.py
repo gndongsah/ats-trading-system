@@ -25,6 +25,7 @@ from src.proposals import (
     ProposalExecutionGate,
     ProposalRiskSnapshot,
     TradeProposal,
+    execution_authorization_from_human_approval,
 )
 
 NOW = datetime(2026, 10, 27, 20, 0, tzinfo=UTC)
@@ -159,7 +160,9 @@ def test_exact_human_approval_and_fresh_risk_can_reach_paper_adapter():
 
     receipt = gate.execute(
         proposal=proposal,
-        approval=approve(proposal),
+        execution_authorization=execution_authorization_from_human_approval(
+            approve(proposal)
+        ),
         reference_price=Decimal(100),
         idempotency_key="proposal-1",
         at=NOW + timedelta(minutes=6),
@@ -172,35 +175,22 @@ def test_exact_human_approval_and_fresh_risk_can_reach_paper_adapter():
     assert receipt.symbol == "ABC"
 
 
-def test_rejected_proposal_never_reaches_risk_or_broker():
+def test_rejected_proposal_cannot_create_execution_authorization():
     proposal = make_proposal()
-    checker = RiskChecker(fresh_risk(proposal))
     rejection = approve(proposal).model_copy(
         update={"decision": ApprovalDecision.REJECT}
     )
-    gate = ProposalExecutionGate(
-        risk_checker=checker,
-        execution_service=ExecutionService(PaperBrokerAdapter()),
-        operational_guard=make_operational_guard(),
-    )
 
-    with pytest.raises(PermissionError, match="not approved"):
-        gate.execute(
-            proposal=proposal,
-            approval=rejection,
-            reference_price=Decimal(100),
-            idempotency_key="proposal-rejected",
-            at=NOW + timedelta(minutes=6),
-            market_data_observed_at=NOW + timedelta(minutes=5, seconds=30),
-            orders_submitted_today=0,
-        )
-    assert checker.calls == 0
+    with pytest.raises(PermissionError, match="cannot authorize execution"):
+        execution_authorization_from_human_approval(rejection)
 
 
 def test_approval_is_bound_to_exact_proposal_fingerprint():
     proposal = make_proposal()
     checker = RiskChecker(fresh_risk(proposal))
-    bad = approve(proposal).model_copy(update={"proposal_fingerprint": "0" * 64})
+    bad = execution_authorization_from_human_approval(approve(proposal)).model_copy(
+        update={"proposal_fingerprint": "0" * 64}
+    )
     gate = ProposalExecutionGate(
         risk_checker=checker,
         execution_service=ExecutionService(PaperBrokerAdapter()),
@@ -210,7 +200,7 @@ def test_approval_is_bound_to_exact_proposal_fingerprint():
     with pytest.raises(PermissionError, match="does not match"):
         gate.execute(
             proposal=proposal,
-            approval=bad,
+            execution_authorization=bad,
             reference_price=Decimal(100),
             idempotency_key="proposal-mutated",
             at=NOW + timedelta(minutes=6),
@@ -230,10 +220,12 @@ def test_risk_must_be_rechecked_after_approval():
         operational_guard=make_operational_guard(),
     )
 
-    with pytest.raises(PermissionError, match="after human approval"):
+    with pytest.raises(PermissionError, match="after execution authorization"):
         gate.execute(
             proposal=proposal,
-            approval=approve(proposal),
+            execution_authorization=execution_authorization_from_human_approval(
+                approve(proposal)
+            ),
             reference_price=Decimal(100),
             idempotency_key="stale-risk",
             at=NOW + timedelta(minutes=6),
@@ -260,7 +252,9 @@ def test_fresh_risk_denial_blocks_paper_execution():
     with pytest.raises(PermissionError, match="denied"):
         gate.execute(
             proposal=proposal,
-            approval=approve(proposal),
+            execution_authorization=execution_authorization_from_human_approval(
+                approve(proposal)
+            ),
             reference_price=Decimal(100),
             idempotency_key="risk-denied",
             at=NOW + timedelta(minutes=6),
@@ -287,7 +281,9 @@ def test_fresh_resize_below_human_approved_size_fails_closed():
     with pytest.raises(PermissionError, match="approved size"):
         gate.execute(
             proposal=proposal,
-            approval=approve(proposal),
+            execution_authorization=execution_authorization_from_human_approval(
+                approve(proposal)
+            ),
             reference_price=Decimal(100),
             idempotency_key="resize",
             at=NOW + timedelta(minutes=6),
@@ -328,7 +324,9 @@ def test_whole_share_gate_rejects_fractional_paper_quantity():
     with pytest.raises(PermissionError, match="whole-share"):
         gate.execute(
             proposal=fractional,
-            approval=approve(fractional),
+            execution_authorization=execution_authorization_from_human_approval(
+                approve(fractional)
+            ),
             reference_price=Decimal(100),
             idempotency_key="fractional",
             at=NOW + timedelta(minutes=6),
