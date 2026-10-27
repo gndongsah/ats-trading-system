@@ -110,6 +110,23 @@ eligibility service described below. Sprint 3 implements deterministic
 portfolio-risk reservations and loss-lock integration; ATS-027 evolves that
 account boundary into the Architecture v1.1 Portfolio State contract.
 
+## ATS-017 walk-forward backtest reporting
+
+`src/backtest_reporting.py` provides a dedicated REPLAY-only analytics layer
+for accepted ATS-016 outcomes without weakening the generic LIVE-only analytics
+boundary.
+
+Reports include overall, setup, regime and setup-by-regime performance with
+trade count, win rate, cumulative/average R, max drawdown, profit factor and
+MAE/MFE coverage plus averages/medians. Explicit UTC walk-forward windows use
+decision time and half-open `[start, end)` boundaries.
+
+Window definitions are caller supplied and must cover every reported trade
+exactly once. ATS-017 does not invent a monthly/quarterly cadence and does not
+perform parameter optimization.
+
+See [docs/ATS-017-walk-forward-reporting.md](docs/ATS-017-walk-forward-reporting.md).
+
 ## ATS-016 deterministic backtest harness
 
 `src/backtest.py` converts an accepted point-in-time replay context plus an
