@@ -265,7 +265,14 @@ def test_proposal_rejects_cross_plan_intent():
     wrong_intent = proposal.intent.model_copy(update={"plan_id": make_plan().id})
 
     with pytest.raises(ValidationError, match="intent must reference"):
-        proposal.model_copy(update={"intent": wrong_intent})
+        TradeProposal(
+            id=proposal.id,
+            version=proposal.version,
+            plan=proposal.plan,
+            intent=wrong_intent,
+            risk=proposal.risk,
+            created_at=proposal.created_at,
+        )
 
 
 def test_whole_share_gate_rejects_fractional_paper_quantity():
