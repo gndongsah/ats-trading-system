@@ -110,6 +110,24 @@ eligibility service described below. Sprint 3 implements deterministic
 portfolio-risk reservations and loss-lock integration; ATS-027 evolves that
 account boundary into the Architecture v1.1 Portfolio State contract.
 
+## ATS-015 initial swing triggers
+
+`src/swing_triggers.py` implements the three Playbook v3 swing trigger and
+invalidation contracts: breakout retest, first/second pullback to a rising
+21-day EMA, and breakdown short.
+
+Every trigger consumes the accepted ATS-014 Setup Score at the same timestamp.
+Swing actionability requires Setup Score 70+ and no existing ATS-014 no-trade
+gate. Results include exact trigger/invalidation levels, side, actionability,
+failure reasons, rule version and the complete Setup Score evidence.
+
+The implementation uses only written Playbook numeric rules. Breakout stops are
+restricted to 3–5% below the base. Where the playbook says only "below the
+swing low" or "above the failed bounce," the caller supplies the exact
+invalidation and ATS-015 validates its geometry rather than inventing an offset.
+
+See [docs/ATS-015-swing-triggers.md](docs/ATS-015-swing-triggers.md).
+
 ## ATS-014 deterministic Setup Score
 
 `src/setup_score.py` implements the Playbook v3 0–100 Setup Score from the
