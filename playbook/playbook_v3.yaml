@@ -115,6 +115,7 @@ regime:
         - early_reclaim_attempts
 
 setup_score:
+  version: "1.0"
   max_score: 100
 
   factors:
