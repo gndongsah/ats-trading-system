@@ -165,7 +165,8 @@ def review_research_critique(
                 reasons.add(CritiqueReviewReason.SOURCE_REFERENCE_MISMATCH)
                 continue
             if (
-                evidence.subject.strip().casefold() != critique.subject.strip().casefold()
+                evidence.subject.strip().casefold()
+                != critique.subject.strip().casefold()
                 or source.subject.strip().casefold()
                 != critique.subject.strip().casefold()
             ):
