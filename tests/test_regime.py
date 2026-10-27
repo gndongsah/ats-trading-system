@@ -130,16 +130,16 @@ def test_classifier_does_not_invent_variable_or_special_setup_multiplier(signals
 def test_configured_precedence_resolves_overlapping_matching_rules():
     inputs = RegimeInputs(
         as_of=AS_OF,
+        index_trending_up=True,
         spy_below_50dma=True,
-        breadth_washed_out=True,
-        volatility_spiking=True,
-        early_reclaim_attempts=True,
+        breadth_deteriorating=True,
+        leadership_concentrated=True,
         new_lows_expanding=True,
     )
     result = classify_market_regime(inputs)
 
-    assert result.regime is Regime.CAPITULATION_REVERSAL
-    assert result.rule_name == "capitulation_reversal"
+    assert result.regime is Regime.RISK_OFF
+    assert result.rule_name == "risk_off"
 
 
 def test_no_match_fails_closed_instead_of_guessing_neutral():
