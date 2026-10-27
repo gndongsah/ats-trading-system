@@ -154,7 +154,10 @@ def review_research_critique(
                 continue
             if evidence.version != reference.evidence_version:
                 reasons.add(CritiqueReviewReason.EVIDENCE_VERSION_MISMATCH)
-            if evidence.source_document_version_id != reference.source_document_version_id:
+            if (
+                evidence.source_document_version_id
+                != reference.source_document_version_id
+            ):
                 reasons.add(CritiqueReviewReason.SOURCE_REFERENCE_MISMATCH)
                 continue
             source = sources.get(reference.source_document_version_id)
