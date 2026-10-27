@@ -64,3 +64,53 @@ discovery:
     tier_a: 80
     tier_b: 65
     watchlist: 50
+
+regime:
+  version: "1.0"
+  precedence:
+    - capitulation_reversal
+    - risk_off
+    - risk_on
+    - risk_on_narrow
+    - neutral_chop
+
+  rules:
+    risk_on:
+      regime: 1
+      requires:
+        - spy_above_50dma
+        - dma50_above_200dma
+        - dma50_rising
+        - dma200_rising
+        - breadth_healthy
+        - advancers_leading
+        - new_highs_expanding
+
+    risk_on_narrow:
+      regime: 2
+      requires:
+        - index_trending_up
+        - breadth_deteriorating
+        - leadership_concentrated
+
+    neutral_chop:
+      regime: 3
+      requires:
+        - index_sideways_around_50dma
+        - breadth_mixed
+        - breakouts_failing_both_ways
+
+    risk_off:
+      regime: 4
+      requires:
+        - spy_below_50dma
+        - breadth_deteriorating
+        - new_lows_expanding
+
+    capitulation_reversal:
+      regime: 5
+      requires:
+        - breadth_washed_out
+        - volatility_spiking
+        - early_reclaim_attempts
+
