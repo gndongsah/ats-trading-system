@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 from decimal import Decimal, localcontext
 
 import pytest
@@ -173,6 +174,7 @@ def context(*, symbol="ABC", as_of=AS_OF) -> HistoricalReplayContext:
         ingested_at=as_of - timedelta(seconds=40),
     )
     source = SourceDocument(
+        id=UUID("00000000-0000-0000-0000-000000000016"),
         source_id=f"sec:{symbol}:10-q",
         version=1,
         source_type="regulatory_filing",
@@ -446,3 +448,15 @@ def test_backtest_is_independent_of_ambient_decimal_precision():
 
     assert repeated == baseline
     assert repeated.digest == baseline.digest
+
+
+def test_invalid_risk_sizing_input_fails_closed():
+    with pytest.raises(BacktestUnavailable, match="SIZING_INPUT"):
+        run(
+            110,
+            sizing_inputs=BacktestSizingInputs(
+                equity=Decimal(100000),
+                risk_fraction=Decimal("0.01"),
+                available_buying_power=Decimal(100000),
+            ),
+        )
