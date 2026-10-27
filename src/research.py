@@ -57,7 +57,9 @@ class ResearchEvidenceDraft(BaseModel):
         if has_metric and not all(value is not None for value in metric_values):
             raise ValueError("structured metrics require a name, value, and unit")
         if self.excerpt is None and not has_metric:
-            raise ValueError(\n                "research evidence requires an excerpt or structured metric"\n            )
+            raise ValueError(
+                "research evidence requires an excerpt or structured metric"
+            )
         return self
 
 
@@ -79,7 +81,9 @@ def materialize_unverified_research_evidence(
 
     observed_at = _require_utc(observed_at)
     if draft.source_document_version_id != source.id:
-        raise ValueError(\n            "research draft source reference does not match source document"\n        )
+        raise ValueError(
+            "research draft source reference does not match source document"
+        )
     if draft.subject.strip().casefold() != source.subject.strip().casefold():
         raise ValueError("research draft subject does not match source document")
     if observed_at < source.observed_at:
