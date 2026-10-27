@@ -163,6 +163,7 @@ class SwingLongScreenConfig(BaseModel):
 
 
 class SetupScoreConfig(ScoreSection):
+    version: str = Field(min_length=1)
     swing_long_screen: SwingLongScreenConfig
 
     @model_validator(mode="after")
