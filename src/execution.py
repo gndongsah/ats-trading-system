@@ -70,6 +70,16 @@ class BrokerSubmissionRequest(BaseModel):
             raise ValueError("ATS-022 broker submissions are PAPER-only")
         if self.submitted_at < self.intent.created_at:
             raise ValueError("submission cannot predate the order intent")
+        if (
+            self.intent.order_type in {OrderType.LIMIT, OrderType.STOP_LIMIT}
+            and self.intent.limit_price is None
+        ):
+            raise ValueError("limit and stop-limit intents require limit_price")
+        if (
+            self.intent.order_type in {OrderType.STOP, OrderType.STOP_LIMIT}
+            and self.intent.stop_price is None
+        ):
+            raise ValueError("stop and stop-limit intents require stop_price")
         return self
 
 
