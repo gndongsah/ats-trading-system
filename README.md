@@ -110,6 +110,23 @@ eligibility service described below. Sprint 3 implements deterministic
 portfolio-risk reservations and loss-lock integration; ATS-027 evolves that
 account boundary into the Architecture v1.1 Portfolio State contract.
 
+## ATS-014 deterministic Setup Score
+
+`src/setup_score.py` implements the Playbook v3 0–100 Setup Score from the
+configured 25/25/25/15/10 component maxima. Component points are bounded by
+their configured weights and summed exactly; the code does not invent
+fractional sub-formulas absent from the playbook.
+
+Score bands are deterministic: 70+ planned size, 50–69 unproven size, below
+50 no trade. Ordinary swing-long candidates must also pass the explicit
+trend/RS/liquidity/extension/earnings screen. Any failed mandatory screen
+forces final actionability to no trade even if the numeric score is 70+.
+
+ATS-014 records the accepted ATS-013 regime classification at the same
+timestamp but leaves trigger/invalidation mechanics to ATS-015.
+
+See [docs/ATS-014-setup-score.md](docs/ATS-014-setup-score.md).
+
 ## ATS-013 market regime classifier
 
 `src/regime.py` implements the deterministic Playbook v3 market-regime
