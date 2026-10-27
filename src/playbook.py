@@ -221,6 +221,45 @@ class SetupScoreConfig(ScoreSection):
         return self
 
 
+class BreakoutRetestConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stop_below_base_pct_min: float = Field(ge=0, allow_inf_nan=False)
+    stop_below_base_pct_max: float = Field(ge=0, allow_inf_nan=False)
+
+
+class Ema21PullbackConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_tap_number: int = Field(ge=1, strict=True)
+
+
+class SwingTriggerConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: str = Field(min_length=1)
+    min_setup_score: float = Field(ge=0, le=100, allow_inf_nan=False)
+    breakout_retest: BreakoutRetestConfig
+    ema21_pullback: Ema21PullbackConfig
+
+    @model_validator(mode="after")
+    def validate_swing_triggers(self) -> Self:
+        breakout = self.breakout_retest
+        if not math.isclose(self.min_setup_score, 70.0, rel_tol=0, abs_tol=1e-9):
+            raise ValueError("swing trigger minimum Setup Score must be exactly 70")
+        if not math.isclose(
+            breakout.stop_below_base_pct_min, 3.0, rel_tol=0, abs_tol=1e-9
+        ) or not math.isclose(
+            breakout.stop_below_base_pct_max, 5.0, rel_tol=0, abs_tol=1e-9
+        ):
+            raise ValueError("breakout retest stop range must be exactly 3% to 5%")
+        if breakout.stop_below_base_pct_min > breakout.stop_below_base_pct_max:
+            raise ValueError("breakout retest stop range is invalid")
+        if self.ema21_pullback.max_tap_number != 2:
+            raise ValueError("21EMA pullback max tap number must be exactly 2")
+        return self
+
+
 class PlaybookConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -229,6 +268,7 @@ class PlaybookConfig(BaseModel):
     discovery: DiscoveryConfig
     regime: RegimeConfig
     setup_score: SetupScoreConfig
+    swing_triggers: SwingTriggerConfig
 
 
 def load_playbook(path: Path = PLAYBOOK_PATH) -> PlaybookConfig:
