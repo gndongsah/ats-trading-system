@@ -7,7 +7,8 @@ import json
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
-from urllib import error, request
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -45,7 +46,7 @@ class TypeSafeJevClient:
         state: str | dict[str, object],
         question_name: str,
         instructions: str,
-        transport: Callable[[request.Request, float], bytes] | None = None,
+        transport: Callable[[urllib_request.Request, float], bytes] | None = None,
     ) -> JevBooleanAnswer:
         payload = {
             "state": state,
@@ -57,7 +58,7 @@ class TypeSafeJevClient:
                 }
             },
         }
-        request = request.Request(
+        req = urllib_request.Request(
             self.endpoint,
             data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
             headers={
@@ -68,17 +69,17 @@ class TypeSafeJevClient:
         )
         if transport is None:
             transport = _urlopen_transport
-        raw = transport(request, self.timeout_seconds)
+        raw = transport(req, self.timeout_seconds)
         return parse_boolean_response(raw, question_name=question_name)
 
 
-def _urlopen_transport(request: request.Request, timeout_seconds: float) -> bytes:
+def _urlopen_transport(req: urllib_request.Request, timeout_seconds: float) -> bytes:
     try:
-        with request.urlopen(request, timeout=timeout_seconds) as response:
+        with urllib_request.urlopen(req, timeout=timeout_seconds) as response:
             return response.read()
-    except error.HTTPError as exc:
+    except urllib_error.HTTPError as exc:
         raise RuntimeError(f"TypeSafe API returned HTTP {exc.code}") from exc
-    except error.URLError as exc:
+    except urllib_error.URLError as exc:
         raise RuntimeError("TypeSafe API request failed") from exc
 
 
