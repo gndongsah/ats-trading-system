@@ -193,7 +193,10 @@ def apply_evidence_verification(
         raise ValueError("only unverified evidence can enter verifier workflow")
     if evidence.source_document_version_id != source.id:
         raise ValueError("evidence source reference does not match source document")
-    if researcher_identity.strip().casefold() == attestation.verifier_identity.casefold():
+    if (
+        researcher_identity.strip().casefold()
+        == attestation.verifier_identity.casefold()
+    ):
         raise ValueError("verifier identity must differ from researcher identity")
     if attestation.verified_at < evidence.observed_at:
         raise ValueError("evidence cannot be verified before it is observed")
