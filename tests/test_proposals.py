@@ -184,6 +184,7 @@ def test_rejected_proposal_cannot_create_execution_authorization():
     with pytest.raises(PermissionError, match="cannot authorize execution"):
         execution_authorization_from_human_approval(rejection)
 
+
 def test_approval_is_bound_to_exact_proposal_fingerprint():
     proposal = make_proposal()
     checker = RiskChecker(fresh_risk(proposal))
@@ -223,8 +224,8 @@ def test_risk_must_be_rechecked_after_approval():
         gate.execute(
             proposal=proposal,
             execution_authorization=execution_authorization_from_human_approval(
-            approve(proposal)
-        ),
+                approve(proposal)
+            ),
             reference_price=Decimal(100),
             idempotency_key="stale-risk",
             at=NOW + timedelta(minutes=6),
@@ -252,8 +253,8 @@ def test_fresh_risk_denial_blocks_paper_execution():
         gate.execute(
             proposal=proposal,
             execution_authorization=execution_authorization_from_human_approval(
-            approve(proposal)
-        ),
+                approve(proposal)
+            ),
             reference_price=Decimal(100),
             idempotency_key="risk-denied",
             at=NOW + timedelta(minutes=6),
@@ -281,8 +282,8 @@ def test_fresh_resize_below_human_approved_size_fails_closed():
         gate.execute(
             proposal=proposal,
             execution_authorization=execution_authorization_from_human_approval(
-            approve(proposal)
-        ),
+                approve(proposal)
+            ),
             reference_price=Decimal(100),
             idempotency_key="resize",
             at=NOW + timedelta(minutes=6),
