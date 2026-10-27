@@ -5,10 +5,9 @@ No credential is stored in source control. The adapter reads TYPESAFE_API_KEY at
 
 import json
 import os
-import urllib.error
-import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
+from urllib import error, request
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,7 +45,7 @@ class TypeSafeJevClient:
         state: str | dict[str, object],
         question_name: str,
         instructions: str,
-        transport: Callable[[urllib.request.Request, float], bytes] | None = None,
+        transport: Callable[[request.Request, float], bytes] | None = None,
     ) -> JevBooleanAnswer:
         payload = {
             "state": state,
@@ -58,7 +57,7 @@ class TypeSafeJevClient:
                 }
             },
         }
-        request = urllib.request.Request(
+        request = request.Request(
             self.endpoint,
             data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
             headers={
@@ -73,13 +72,13 @@ class TypeSafeJevClient:
         return parse_boolean_response(raw, question_name=question_name)
 
 
-def _urlopen_transport(request: urllib.request.Request, timeout_seconds: float) -> bytes:
+def _urlopen_transport(request: request.Request, timeout_seconds: float) -> bytes:
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        with request.urlopen(request, timeout=timeout_seconds) as response:
             return response.read()
-    except urllib.error.HTTPError as exc:
+    except error.HTTPError as exc:
         raise RuntimeError(f"TypeSafe API returned HTTP {exc.code}") from exc
-    except urllib.error.URLError as exc:
+    except error.URLError as exc:
         raise RuntimeError("TypeSafe API request failed") from exc
 
 
