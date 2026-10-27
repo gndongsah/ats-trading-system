@@ -281,10 +281,7 @@ class DeterministicBacktestHarness:
             )
         except (TypeError, ValueError) as error:
             raise BacktestUnavailable(f"SIZING_INPUT:{error}") from error
-        if (
-            sizing_result.decision is SizingDecision.DENY
-            or sizing_result.quantity <= 0
-        ):
+        if sizing_result.decision is SizingDecision.DENY or sizing_result.quantity <= 0:
             raise BacktestUnavailable(f"SIZING:{sizing_result.reason.value}")
 
         quantity = sizing_result.quantity
