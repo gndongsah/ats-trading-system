@@ -96,3 +96,13 @@ def test_invalid_setup_score_playbook_rejects_missing_factor(tmp_path):
 
     with pytest.raises(PlaybookValidationError, match="five Playbook v3 components"):
         load_playbook(invalid_path)
+
+
+def test_invalid_setup_score_playbook_rejects_changed_swing_screen_limits(tmp_path):
+    playbook = yaml.safe_load(PLAYBOOK_PATH.read_text(encoding="utf-8"))
+    playbook["setup_score"]["swing_long_screen"]["min_avg_daily_volume"] = 499999
+    invalid_path = tmp_path / "invalid-setup-screen.yaml"
+    invalid_path.write_text(yaml.safe_dump(playbook), encoding="utf-8")
+
+    with pytest.raises(PlaybookValidationError, match="500k volume"):
+        load_playbook(invalid_path)
