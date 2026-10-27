@@ -114,3 +114,31 @@ regime:
         - volatility_spiking
         - early_reclaim_attempts
 
+setup_score:
+  max_score: 100
+
+  factors:
+    trend_alignment:
+      weight: 25
+
+    relative_strength_vs_spy:
+      weight: 25
+
+    structure_quality:
+      weight: 25
+
+    liquidity_volume_confirmation:
+      weight: 15
+
+    earnings_distance_safety:
+      weight: 10
+
+  thresholds:
+    planned_size: 70
+    unproven_size: 50
+
+  swing_long_screen:
+    min_avg_daily_volume: 500000
+    max_extension_pct_50dma: 10
+    min_days_to_earnings: 10
+
