@@ -123,9 +123,7 @@ class RegimeRuleConfig(BaseModel):
             raise ValueError("regime rule cannot repeat required signals")
         unknown = set(normalized) - REGIME_SIGNAL_NAMES
         if unknown:
-            raise ValueError(
-                f"unknown regime signal(s): {', '.join(sorted(unknown))}"
-            )
+            raise ValueError(f"unknown regime signal(s): {', '.join(sorted(unknown))}")
         return normalized
 
 
@@ -150,7 +148,9 @@ class RegimeConfig(BaseModel):
         if len(set(configured_regimes)) != len(configured_regimes):
             raise ValueError("each regime number must be configured exactly once")
         if set(configured_regimes) != {1, 2, 3, 4, 5}:
-            raise ValueError("regime rules must configure regimes 1 through 5 exactly once")
+            raise ValueError(
+                "regime rules must configure regimes 1 through 5 exactly once"
+            )
         return self
 
 
