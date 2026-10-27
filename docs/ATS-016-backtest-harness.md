@@ -82,6 +82,7 @@ An R multiple may be a repeating rational. ATS-016 therefore preserves:
 
 `BacktestTradeOutcome` records:
 
+- decision timestamp, swing setup type, regime and Setup Score for ATS-017 grouping;
 - replay-context digest;
 - deterministic request digest;
 - sizing decision and quantity;
