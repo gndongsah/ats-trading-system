@@ -21,7 +21,7 @@ def intent(
     *,
     action=OrderAction.BUY,
     order_type=OrderType.MARKET,
-    quantity=Decimal("10"),
+    quantity=Decimal(10),
     limit_price=None,
     stop_price=None,
 ):
@@ -36,7 +36,7 @@ def intent(
     )
 
 
-def request(*, order_intent, key="case-1", reference_price=Decimal("100")):
+def request(*, order_intent, key="case-1", reference_price=Decimal(100)):
     return BrokerSubmissionRequest(
         idempotency_key=key,
         run_type=RunType.PAPER,
@@ -75,7 +75,7 @@ def test_submission_is_strictly_paper_only():
             run_type=RunType.LIVE,
             symbol="ABC",
             intent=intent(),
-            reference_price=Decimal("100"),
+            reference_price=Decimal(100),
             submitted_at=NOW + timedelta(seconds=1),
         )
 
@@ -90,7 +90,7 @@ def test_market_submission_fills_at_reference_price():
     assert receipt.status is SubmissionStatus.FILLED
     assert receipt.symbol == "ABC"
     assert receipt.fill is not None
-    assert receipt.fill.quantity == Decimal("10")
+    assert receipt.fill.quantity == Decimal(10)
     assert receipt.fill.price == Decimal("101.25")
     assert receipt.fill.fees == Decimal(0)
 
@@ -100,9 +100,9 @@ def test_unmarketable_limit_is_accepted_without_fill():
     req = request(
         order_intent=intent(
             order_type=OrderType.LIMIT,
-            limit_price=Decimal("99"),
+            limit_price=Decimal(99),
         ),
-        reference_price=Decimal("100"),
+        reference_price=Decimal(100),
     )
 
     receipt = adapter.submit(req)
@@ -116,16 +116,16 @@ def test_marketable_limit_uses_better_reference_price():
     req = request(
         order_intent=intent(
             order_type=OrderType.LIMIT,
-            limit_price=Decimal("101"),
+            limit_price=Decimal(101),
         ),
-        reference_price=Decimal("100"),
+        reference_price=Decimal(100),
     )
 
     receipt = adapter.submit(req)
 
     assert receipt.status is SubmissionStatus.FILLED
     assert receipt.fill is not None
-    assert receipt.fill.price == Decimal("100")
+    assert receipt.fill.price == Decimal(100)
 
 
 def test_stop_waits_until_trigger_then_fills():
@@ -133,25 +133,25 @@ def test_stop_waits_until_trigger_then_fills():
     pending = request(
         order_intent=intent(
             order_type=OrderType.STOP,
-            stop_price=Decimal("105"),
+            stop_price=Decimal(105),
         ),
         key="stop-pending",
-        reference_price=Decimal("100"),
+        reference_price=Decimal(100),
     )
     triggered = request(
         order_intent=intent(
             order_type=OrderType.STOP,
-            stop_price=Decimal("105"),
+            stop_price=Decimal(105),
         ),
         key="stop-triggered",
-        reference_price=Decimal("106"),
+        reference_price=Decimal(106),
     )
 
     assert adapter.submit(pending).status is SubmissionStatus.ACCEPTED
     filled = adapter.submit(triggered)
     assert filled.status is SubmissionStatus.FILLED
     assert filled.fill is not None
-    assert filled.fill.price == Decimal("106")
+    assert filled.fill.price == Decimal(106)
 
 
 def test_idempotent_replay_returns_same_receipt():
@@ -169,7 +169,7 @@ def test_idempotency_key_reuse_with_different_payload_fails_closed():
     adapter = PaperBrokerAdapter()
     first = request(order_intent=intent(), key="collision")
     second = request(
-        order_intent=intent(quantity=Decimal("11")),
+        order_intent=intent(quantity=Decimal(11)),
         key="collision",
     )
 
@@ -183,8 +183,8 @@ def test_idempotency_key_reuse_with_different_payload_fails_closed():
     [
         (OrderType.LIMIT, None, None, "limit_price"),
         (OrderType.STOP, None, None, "stop_price"),
-        (OrderType.STOP_LIMIT, Decimal("101"), None, "stop_price"),
-        (OrderType.STOP_LIMIT, None, Decimal("99"), "limit_price"),
+        (OrderType.STOP_LIMIT, Decimal(101), None, "stop_price"),
+        (OrderType.STOP_LIMIT, None, Decimal(99), "limit_price"),
     ],
 )
 def test_required_price_instructions_fail_closed(
@@ -211,6 +211,6 @@ def test_submission_cannot_predate_intent():
             run_type=RunType.PAPER,
             symbol="ABC",
             intent=order_intent,
-            reference_price=Decimal("100"),
+            reference_price=Decimal(100),
             submitted_at=NOW - timedelta(seconds=1),
         )
