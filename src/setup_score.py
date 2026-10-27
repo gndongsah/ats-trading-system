@@ -138,9 +138,7 @@ def _swing_long_gate_failures(
         failures.append(SetupGateFailure.RS_6M_NOT_OUTPERFORMING)
     if screen.avg_daily_volume <= rules.min_avg_daily_volume:
         failures.append(SetupGateFailure.AVG_DAILY_VOLUME_NOT_ABOVE_MINIMUM)
-    if screen.extension_pct_50dma > Decimal(
-        str(rules.max_extension_pct_50dma)
-    ):
+    if screen.extension_pct_50dma > Decimal(str(rules.max_extension_pct_50dma)):
         failures.append(SetupGateFailure.EXTENDED_MORE_THAN_MAX_50DMA)
     if not screen.explicit_earnings_plan:
         if screen.days_to_earnings is None:
@@ -187,9 +185,7 @@ def score_setup(
     elif swing_long_screen is not None:
         raise ValueError("swing-long execution screen is only valid for swing longs")
 
-    actionability = (
-        SetupActionability.NO_TRADE if failures else band
-    )
+    actionability = SetupActionability.NO_TRADE if failures else band
 
     return SetupScoreResult(
         as_of=as_of,
