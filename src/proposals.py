@@ -15,6 +15,7 @@ from src.execution import (
     BrokerSubmissionRequest,
     ExecutionService,
 )
+from src.operational_guards import OperationalGuard, OperationalGuardContext
 from src.portfolio import RiskDecision
 from src.run_type import RunType
 
@@ -126,9 +127,11 @@ class ProposalExecutionGate:
         *,
         risk_checker: ProposalRiskChecker,
         execution_service: ExecutionService,
+        operational_guard: OperationalGuard,
     ) -> None:
         self._risk_checker = risk_checker
         self._execution_service = execution_service
+        self._operational_guard = operational_guard
 
     def execute(
         self,
@@ -138,6 +141,8 @@ class ProposalExecutionGate:
         reference_price: Decimal,
         idempotency_key: str,
         at: datetime,
+        market_data_observed_at: datetime,
+        orders_submitted_today: int,
     ) -> BrokerSubmissionReceipt:
         at = _require_utc(at)
         if approval.proposal_id != proposal.id:
@@ -174,5 +179,13 @@ class ProposalExecutionGate:
             intent=proposal.intent,
             reference_price=reference_price,
             submitted_at=at,
+        )
+        self._operational_guard.validate(
+            request=request,
+            context=OperationalGuardContext(
+                evaluated_at=at,
+                market_data_observed_at=market_data_observed_at,
+                orders_submitted_today=orders_submitted_today,
+            ),
         )
         return self._execution_service.submit(request)

@@ -17,6 +17,7 @@ from src.domain.models import (
     TradingStyle,
 )
 from src.execution import ExecutionService, PaperBrokerAdapter, SubmissionStatus
+from src.operational_guards import OperationalGuard, OperationalGuardPolicy
 from src.portfolio import RiskDecision
 from src.proposals import (
     ApprovalDecision,
@@ -90,6 +91,23 @@ def approve(proposal: TradeProposal) -> HumanApproval:
     )
 
 
+class AlwaysOpen:
+    def is_open(self, at):
+        return True
+
+
+def make_operational_guard() -> OperationalGuard:
+    return OperationalGuard(
+        policy=OperationalGuardPolicy(
+            max_order_quantity=Decimal(1000),
+            max_order_notional=Decimal(1_000_000),
+            max_orders_per_day=100,
+            max_market_data_age=timedelta(minutes=1),
+        ),
+        market_hours=AlwaysOpen(),
+    )
+
+
 class RiskChecker:
     def __init__(self, result: ProposalRiskSnapshot):
         self.result = result
@@ -136,6 +154,7 @@ def test_exact_human_approval_and_fresh_risk_can_reach_paper_adapter():
     gate = ProposalExecutionGate(
         risk_checker=checker,
         execution_service=ExecutionService(PaperBrokerAdapter()),
+        operational_guard=make_operational_guard(),
     )
 
     receipt = gate.execute(
@@ -144,6 +163,8 @@ def test_exact_human_approval_and_fresh_risk_can_reach_paper_adapter():
         reference_price=Decimal(100),
         idempotency_key="proposal-1",
         at=NOW + timedelta(minutes=6),
+        market_data_observed_at=NOW + timedelta(minutes=5, seconds=30),
+        orders_submitted_today=0,
     )
 
     assert checker.calls == 1
@@ -160,6 +181,7 @@ def test_rejected_proposal_never_reaches_risk_or_broker():
     gate = ProposalExecutionGate(
         risk_checker=checker,
         execution_service=ExecutionService(PaperBrokerAdapter()),
+        operational_guard=make_operational_guard(),
     )
 
     with pytest.raises(PermissionError, match="not approved"):
@@ -169,6 +191,8 @@ def test_rejected_proposal_never_reaches_risk_or_broker():
             reference_price=Decimal(100),
             idempotency_key="proposal-rejected",
             at=NOW + timedelta(minutes=6),
+            market_data_observed_at=NOW + timedelta(minutes=5, seconds=30),
+            orders_submitted_today=0,
         )
     assert checker.calls == 0
 
@@ -180,6 +204,7 @@ def test_approval_is_bound_to_exact_proposal_fingerprint():
     gate = ProposalExecutionGate(
         risk_checker=checker,
         execution_service=ExecutionService(PaperBrokerAdapter()),
+        operational_guard=make_operational_guard(),
     )
 
     with pytest.raises(PermissionError, match="does not match"):
@@ -189,6 +214,8 @@ def test_approval_is_bound_to_exact_proposal_fingerprint():
             reference_price=Decimal(100),
             idempotency_key="proposal-mutated",
             at=NOW + timedelta(minutes=6),
+            market_data_observed_at=NOW + timedelta(minutes=5, seconds=30),
+            orders_submitted_today=0,
         )
 
 
@@ -200,6 +227,7 @@ def test_risk_must_be_rechecked_after_approval():
     gate = ProposalExecutionGate(
         risk_checker=checker,
         execution_service=ExecutionService(PaperBrokerAdapter()),
+        operational_guard=make_operational_guard(),
     )
 
     with pytest.raises(PermissionError, match="after human approval"):
@@ -209,6 +237,8 @@ def test_risk_must_be_rechecked_after_approval():
             reference_price=Decimal(100),
             idempotency_key="stale-risk",
             at=NOW + timedelta(minutes=6),
+            market_data_observed_at=NOW + timedelta(minutes=5, seconds=30),
+            orders_submitted_today=0,
         )
 
 
@@ -224,6 +254,7 @@ def test_fresh_risk_denial_blocks_paper_execution():
     gate = ProposalExecutionGate(
         risk_checker=checker,
         execution_service=ExecutionService(PaperBrokerAdapter()),
+        operational_guard=make_operational_guard(),
     )
 
     with pytest.raises(PermissionError, match="denied"):
@@ -233,6 +264,8 @@ def test_fresh_risk_denial_blocks_paper_execution():
             reference_price=Decimal(100),
             idempotency_key="risk-denied",
             at=NOW + timedelta(minutes=6),
+            market_data_observed_at=NOW + timedelta(minutes=5, seconds=30),
+            orders_submitted_today=0,
         )
 
 
@@ -248,6 +281,7 @@ def test_fresh_resize_below_human_approved_size_fails_closed():
     gate = ProposalExecutionGate(
         risk_checker=checker,
         execution_service=ExecutionService(PaperBrokerAdapter()),
+        operational_guard=make_operational_guard(),
     )
 
     with pytest.raises(PermissionError, match="approved size"):
@@ -257,6 +291,8 @@ def test_fresh_resize_below_human_approved_size_fails_closed():
             reference_price=Decimal(100),
             idempotency_key="resize",
             at=NOW + timedelta(minutes=6),
+            market_data_observed_at=NOW + timedelta(minutes=5, seconds=30),
+            orders_submitted_today=0,
         )
 
 
@@ -286,6 +322,7 @@ def test_whole_share_gate_rejects_fractional_paper_quantity():
     gate = ProposalExecutionGate(
         risk_checker=checker,
         execution_service=ExecutionService(PaperBrokerAdapter()),
+        operational_guard=make_operational_guard(),
     )
 
     with pytest.raises(PermissionError, match="whole-share"):
@@ -295,4 +332,6 @@ def test_whole_share_gate_rejects_fractional_paper_quantity():
             reference_price=Decimal(100),
             idempotency_key="fractional",
             at=NOW + timedelta(minutes=6),
+            market_data_observed_at=NOW + timedelta(minutes=5, seconds=30),
+            orders_submitted_today=0,
         )
