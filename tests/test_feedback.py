@@ -283,6 +283,9 @@ def test_fees_reduce_realized_pnl_and_r_multiple():
     assert journal.result is not None
     assert journal.result.realized_pnl == Decimal(98)
     assert journal.result.r_multiple == Decimal("0.98")
+    assert journal.result.mae_r is None
+    assert journal.result.mfe_r is None
+    assert journal.result.excursion_source is None
 
 
 def test_duplicate_receipt_is_idempotent():
