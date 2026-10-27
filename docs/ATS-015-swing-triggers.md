@@ -19,6 +19,8 @@ A generic ATS-014 50–69 `UNPROVEN_SIZE` band is not sufficient for these swing
 
 The trigger timestamp must exactly match the ATS-014 Setup Score timestamp. ATS-014 already binds that score to the ATS-013 regime timestamp.
 
+ATS-014 now also retains the scored trading style and side in `SetupScoreResult`. ATS-015 requires `SWING` and requires the setup side to match the trigger side, preventing a day-trade score or opposite-side score from being reused as swing evidence.
+
 ## 1. Breakout retest
 
 Playbook rule:
