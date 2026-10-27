@@ -88,7 +88,7 @@ def test_model_output_materializes_as_unverified_only():
         subject="ABC",
         factor="demand_acceleration",
         excerpt="Demand accelerated in the quarter.",
-        confidence=Decimal("1"),
+        confidence=Decimal(1),
     )
 
     evidence = materialize_unverified_research_evidence(
@@ -98,7 +98,7 @@ def test_model_output_materializes_as_unverified_only():
     )
 
     assert evidence.verification_status is EvidenceStatus.UNVERIFIED
-    assert evidence.confidence == Decimal("1")
+    assert evidence.confidence == Decimal(1)
     assert evidence.verifier_identity is None
     assert evidence.verified_at is None
 
@@ -165,7 +165,7 @@ def test_model_confidence_cannot_substitute_for_verification():
         subject="ABC",
         factor="structural_demand_growth",
         excerpt="Demand accelerated.",
-        confidence=Decimal("1"),
+        confidence=Decimal(1),
     )
     evidence = materialize_unverified_research_evidence(
         draft=draft,
