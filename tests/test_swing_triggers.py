@@ -417,3 +417,46 @@ def test_trigger_models_are_immutable():
         candidate.retest_holds = False
     with pytest.raises(ValidationError):
         result.actionability = SwingTriggerActionability.NO_SETUP
+
+
+def test_trigger_requires_swing_setup_context():
+    day_setup = score_setup(
+        as_of=AS_OF,
+        components=components_for_total(70),
+        regime=regime(),
+        trading_style=TradingStyle.DAY,
+        side=TradeSide.LONG,
+    )
+    result = evaluate_breakout_retest(
+        BreakoutRetestInput(
+            as_of=AS_OF,
+            cleared_flat_base=True,
+            rising_volume=True,
+            retest_holds=True,
+            breakout_level=Decimal(100),
+            base_low=Decimal(95),
+            stop_pct_below_base=Decimal(4),
+        ),
+        setup=day_setup,
+    )
+
+    assert result.actionability is SwingTriggerActionability.NO_SETUP
+    assert SwingTriggerFailure.SETUP_NOT_SWING in result.failures
+
+
+def test_trigger_requires_setup_side_to_match_trigger_side():
+    result = evaluate_breakout_retest(
+        BreakoutRetestInput(
+            as_of=AS_OF,
+            cleared_flat_base=True,
+            rising_volume=True,
+            retest_holds=True,
+            breakout_level=Decimal(100),
+            base_low=Decimal(95),
+            stop_pct_below_base=Decimal(4),
+        ),
+        setup=short_setup(),
+    )
+
+    assert result.actionability is SwingTriggerActionability.NO_SETUP
+    assert SwingTriggerFailure.SETUP_SIDE_MISMATCH in result.failures
