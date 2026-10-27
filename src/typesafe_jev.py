@@ -3,6 +3,8 @@
 No credential is stored in source control. The adapter reads TYPESAFE_API_KEY at runtime.
 """
 
+# ruff: noqa: I001
+
 import json
 import os
 from collections.abc import Callable
