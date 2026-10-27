@@ -59,7 +59,9 @@ class RegimeInputs(RegimeModel):
         if sum(breadth_states) > 1:
             raise ValueError("normalized breadth states must be mutually exclusive")
         if self.index_trending_up and self.index_sideways_around_50dma:
-            raise ValueError("index cannot be both trending up and sideways around 50DMA")
+            raise ValueError(
+                "index cannot be both trending up and sideways around 50DMA"
+            )
         return self
 
     @property
