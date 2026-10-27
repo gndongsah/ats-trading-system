@@ -145,6 +145,11 @@ class BacktestPerformanceReport(ReportModel):
         return sha256(self.model_dump_json().encode()).hexdigest()
 
 
+def _quantize(value: Decimal) -> Decimal:
+    with localcontext(METRIC_CONTEXT):
+        return value.quantize(METRIC_QUANTUM)
+
+
 def _divide(numerator: Decimal, denominator: int | Decimal) -> Decimal:
     with localcontext(METRIC_CONTEXT):
         value = numerator / Decimal(denominator)
@@ -157,7 +162,7 @@ def _median(values: tuple[Decimal, ...]) -> Decimal | None:
     ordered = sorted(values)
     middle = len(ordered) // 2
     if len(ordered) % 2:
-        return ordered[middle].quantize(METRIC_QUANTUM)
+        return _quantize(ordered[middle])
     return _divide(ordered[middle - 1] + ordered[middle], 2)
 
 
