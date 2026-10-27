@@ -506,3 +506,50 @@ class LossStateEventRecord(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
+
+
+class TriageExperimentRecord(Base):
+    __tablename__ = "ats_triage_experiments"
+    __table_args__ = (
+        UniqueConstraint(
+            "experiment_id",
+            "case_id",
+            "arm",
+            name="uq_ats_triage_experiment_case_arm",
+        ),
+        CheckConstraint(
+            "arm IN ('llm_only', 'llm_jev')",
+            name="ck_ats_triage_experiment_arm",
+        ),
+        CheckConstraint(
+            "probability >= 0 AND probability <= 1",
+            name="ck_ats_triage_probability",
+        ),
+        Index(
+            "ix_ats_triage_experiment_lookup",
+            "experiment_id",
+            "case_id",
+            "arm",
+            "observed_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    experiment_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    case_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    arm: Mapped[str] = mapped_column(String(16), nullable=False)
+    predicted_label: Mapped[str] = mapped_column(String(128), nullable=False)
+    probability: Mapped[Decimal] = mapped_column(Numeric(8, 7), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    model_version: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    outcome_label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    outcome_resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    prediction_data: Mapped[dict[str, Any]] = mapped_column(
+        JSON_DOCUMENT, nullable=False
+    )
