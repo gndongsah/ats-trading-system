@@ -550,4 +550,6 @@ class TriageExperimentRecord(Base):
     outcome_resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    prediction_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
+    prediction_data: Mapped[dict[str, Any]] = mapped_column(
+        JSON_DOCUMENT, nullable=False
+    )
