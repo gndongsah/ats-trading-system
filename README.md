@@ -110,6 +110,23 @@ eligibility service described below. Sprint 3 implements deterministic
 portfolio-risk reservations and loss-lock integration; ATS-027 evolves that
 account boundary into the Architecture v1.1 Portfolio State contract.
 
+## ATS-016 deterministic backtest harness
+
+`src/backtest.py` converts an accepted point-in-time replay context plus an
+actionable ATS-015 swing trigger into a deterministic REPLAY outcome. It reuses
+the accepted long-equity risk-sizing engine, applies only explicitly supplied
+slippage/fee assumptions, and records exact P&L plus an exact rational R ratio.
+
+Identical replay/trigger/sizing/cost/exit inputs produce deterministic UUID5
+identities and output digests. Optional historical low/high observations produce
+MAE/MFE with source provenance.
+
+The accepted risk-sizing function currently supports whole-share long equities
+only. ATS-016 therefore fails closed for breakdown-short triggers rather than
+inventing a separate short-sizing formula.
+
+See [docs/ATS-016-backtest-harness.md](docs/ATS-016-backtest-harness.md).
+
 ## ATS-015 initial swing triggers
 
 `src/swing_triggers.py` implements the three Playbook v3 swing trigger and
