@@ -154,6 +154,73 @@ class RegimeConfig(BaseModel):
         return self
 
 
+class SwingLongScreenConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min_avg_daily_volume: int = Field(gt=0, strict=True)
+    max_extension_pct_50dma: float = Field(ge=0, allow_inf_nan=False)
+    min_days_to_earnings: int = Field(ge=0, strict=True)
+
+
+class SetupScoreConfig(ScoreSection):
+    version: str = Field(min_length=1)
+    swing_long_screen: SwingLongScreenConfig
+
+    @model_validator(mode="after")
+    def validate_setup_score(self) -> Self:
+        expected_factors = {
+            "trend_alignment",
+            "relative_strength_vs_spy",
+            "structure_quality",
+            "liquidity_volume_confirmation",
+            "earnings_distance_safety",
+        }
+        if set(self.factors) != expected_factors:
+            raise ValueError(
+                "setup score factors must define the five Playbook v3 components"
+            )
+        if set(self.thresholds) != {"planned_size", "unproven_size"}:
+            raise ValueError(
+                "setup score thresholds must define planned_size and unproven_size"
+            )
+        if self.thresholds["planned_size"] <= self.thresholds["unproven_size"]:
+            raise ValueError("planned_size threshold must exceed unproven_size")
+        if not math.isclose(self.max_score, 100.0, rel_tol=0, abs_tol=1e-9):
+            raise ValueError("setup score max_score must be exactly 100")
+        expected_weights = {
+            "trend_alignment": 25.0,
+            "relative_strength_vs_spy": 25.0,
+            "structure_quality": 25.0,
+            "liquidity_volume_confirmation": 15.0,
+            "earnings_distance_safety": 10.0,
+        }
+        actual_weights = {name: factor.weight for name, factor in self.factors.items()}
+        if any(
+            not math.isclose(actual_weights[name], weight, rel_tol=0, abs_tol=1e-9)
+            for name, weight in expected_weights.items()
+        ):
+            raise ValueError("setup score weights must match Playbook v3 exactly")
+        if not math.isclose(
+            self.thresholds["planned_size"], 70.0, rel_tol=0, abs_tol=1e-9
+        ) or not math.isclose(
+            self.thresholds["unproven_size"], 50.0, rel_tol=0, abs_tol=1e-9
+        ):
+            raise ValueError("setup score thresholds must be 70 and 50")
+        screen = self.swing_long_screen
+        if (
+            screen.min_avg_daily_volume != 500_000
+            or not math.isclose(
+                screen.max_extension_pct_50dma, 10.0, rel_tol=0, abs_tol=1e-9
+            )
+            or screen.min_days_to_earnings != 10
+        ):
+            raise ValueError(
+                "swing-long screen must match Playbook v3 limits: "
+                "500k volume, 10% extension, 10-day earnings window"
+            )
+        return self
+
+
 class PlaybookConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -161,6 +228,7 @@ class PlaybookConfig(BaseModel):
     market_opportunity: MarketOpportunityConfig
     discovery: DiscoveryConfig
     regime: RegimeConfig
+    setup_score: SetupScoreConfig
 
 
 def load_playbook(path: Path = PLAYBOOK_PATH) -> PlaybookConfig:
