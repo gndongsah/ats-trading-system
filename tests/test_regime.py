@@ -81,7 +81,9 @@ def test_classifier_reproduces_all_five_playbook_regimes(expected, signals):
         (Regime.NEUTRAL_CHOP, Decimal("0.50")),
     ],
 )
-def test_classifier_exposes_only_fixed_playbook_multipliers(regime, expected_multiplier):
+def test_classifier_exposes_only_fixed_playbook_multipliers(
+    regime, expected_multiplier
+):
     signals = {
         Regime.RISK_ON: {
             "spy_above_50dma": True,
