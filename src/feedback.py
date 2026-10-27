@@ -139,7 +139,7 @@ def compute_closed_trade_result(entry: JournalEntry) -> TradeResult | None:
     fees = sum((fill.fees for fill in entry.fills), Decimal(0))
     realized = gross - fees
     initial_risk = _initial_risk(entry, entry_fills)
-    r_multiple = Decimal(Fraction(realized) / Fraction(initial_risk))
+    ratio = Fraction(realized) / Fraction(initial_risk)\n    r_multiple = Decimal(ratio.numerator) / Decimal(ratio.denominator)
     mae_r, mfe_r = _excursions_in_r(
         snapshots=entry.position_snapshots,
         initial_risk=initial_risk,
