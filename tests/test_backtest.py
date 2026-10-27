@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 import pytest
 from pydantic import ValidationError
@@ -419,3 +419,30 @@ def test_cost_model_is_explicit_and_immutable():
     costs = zero_costs()
     with pytest.raises(ValidationError):
         costs.entry_slippage_bps = Decimal(5)
+
+
+def test_backtest_is_independent_of_ambient_decimal_precision():
+    baseline = run(
+        110,
+        costs=BacktestCostModel(
+            entry_slippage_bps=Decimal(10),
+            exit_slippage_bps=Decimal(10),
+            fee_per_share_per_side=Decimal("0.01"),
+            fixed_fee_per_side=Decimal("0.50"),
+        ),
+    )
+
+    with localcontext() as decimal_context:
+        decimal_context.prec = 6
+        repeated = run(
+            110,
+            costs=BacktestCostModel(
+                entry_slippage_bps=Decimal(10),
+                exit_slippage_bps=Decimal(10),
+                fee_per_share_per_side=Decimal("0.01"),
+                fixed_fee_per_side=Decimal("0.50"),
+            ),
+        )
+
+    assert repeated == baseline
+    assert repeated.digest == baseline.digest
