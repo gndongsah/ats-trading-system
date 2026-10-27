@@ -4,7 +4,14 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    field_validator,
+)
 
 from src.domain.models import TradeSide, TradingStyle, _require_utc
 from src.playbook import PLAYBOOK, SetupScoreConfig
