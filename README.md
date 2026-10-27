@@ -110,6 +110,19 @@ eligibility service described below. Sprint 3 implements deterministic
 portfolio-risk reservations and loss-lock integration; ATS-027 evolves that
 account boundary into the Architecture v1.1 Portfolio State contract.
 
+## ATS-013 market regime classifier
+
+`src/regime.py` implements the deterministic Playbook v3 market-regime
+classifier. Regime rules and precedence live in `playbook/playbook_v3.yaml`,
+while `RegimeInputs` provides immutable normalized index/breadth/high-low
+signals.
+
+The classifier covers Regimes 1–5, records the matched rule and signal evidence,
+and fails closed when no configured rule matches. It deliberately does not
+invent numeric breadth thresholds that are not yet defined by the playbook.
+
+See [docs/ATS-013-regime-classifier.md](docs/ATS-013-regime-classifier.md).
+
 ## ATS-011 filings/news point-in-time ingestion
 
 ATS-011 extends the ATS-005 evidence store with explicit publication,
