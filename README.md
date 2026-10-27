@@ -125,6 +125,23 @@ that were not yet available or ingested at the historical decision time.
 
 See [docs/ATS-011-filings-news-ingestion.md](docs/ATS-011-filings-news-ingestion.md).
 
+## ATS-012 unified historical replay
+
+`HistoricalReplayService` in `src/historical_replay.py` composes persisted
+ATS-010 market snapshots with ATS-011 filing/news source versions at one UTC
+historical timestamp. Market event/availability/ingestion clocks and research
+publication/availability/ingestion clocks are all enforced before selection.
+
+Research requirements also carry an explicit maximum publication age and
+minimum source count. Missing or stale required inputs raise
+`HistoricalReplayUnavailable`.
+
+`HistoricalProposalGate` invokes proposal construction only after the unified
+replay succeeds, so stale or future data cannot silently create a historical
+proposal. No live external fetch or broker execution is introduced.
+
+See [docs/ATS-012-historical-replay.md](docs/ATS-012-historical-replay.md).
+
 ## ATS-027 Portfolio State boundary
 
 `PortfolioState` in `src/portfolio.py` is the broker-independent account-state
