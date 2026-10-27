@@ -87,9 +87,9 @@ def _excursions_in_r(
     *,
     snapshots: tuple[PositionSnapshot, ...],
     initial_risk: Decimal,
-) -> tuple[Decimal, Decimal]:
+) -> tuple[Decimal | None, Decimal | None]:
     if not snapshots:
-        return Decimal(0), Decimal(0)
+        return None, None
     pnl_values = tuple(snapshot.unrealized_pnl for snapshot in snapshots)
     adverse = min(min(pnl_values), Decimal(0))
     favorable = max(max(pnl_values), Decimal(0))
@@ -156,7 +156,7 @@ def compute_closed_trade_result(entry: JournalEntry) -> TradeResult | None:
         outcome=outcome,
         mae_r=mae_r,
         mfe_r=mfe_r,
-        excursion_source="position_snapshots",
+        excursion_source="position_snapshots" if mae_r is not None else None,
     )
 
 
