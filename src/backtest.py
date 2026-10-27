@@ -21,13 +21,14 @@ from pydantic import (
     model_validator,
 )
 
-from src.domain.models import TradeResult, TradeSide, _require_utc
+from src.domain.models import Regime, TradeResult, TradeSide, _require_utc
 from src.historical_replay import HistoricalReplayContext
 from src.risk import SizingDecision, size_long_equity_position
 from src.run_type import RunType
 from src.swing_triggers import (
     SwingTriggerActionability,
     SwingTriggerResult,
+    SwingTriggerType,
 )
 
 ZERO = Decimal(0)
@@ -127,6 +128,10 @@ class BacktestSizingSnapshot(BacktestModel):
 
 class BacktestTradeOutcome(BacktestModel):
     symbol: str = Field(pattern=r"^[A-Z][A-Z0-9.-]{0,31}$")
+    decision_at: datetime
+    trigger_type: SwingTriggerType
+    regime: Regime
+    setup_score: Decimal = Field(ge=ZERO, le=Decimal(100), allow_inf_nan=False)
     context_digest: str = Field(min_length=64, max_length=64)
     request_digest: str = Field(min_length=64, max_length=64)
     sizing: BacktestSizingSnapshot
@@ -359,6 +364,10 @@ class DeterministicBacktestHarness:
 
         return BacktestTradeOutcome(
             symbol=symbol,
+            decision_at=context.as_of,
+            trigger_type=trigger.trigger_type,
+            regime=regime,
+            setup_score=trigger.setup_score.score,
             context_digest=context.digest,
             request_digest=request_digest,
             sizing=BacktestSizingSnapshot(
