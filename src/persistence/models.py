@@ -553,3 +553,31 @@ class TriageExperimentRecord(Base):
     prediction_data: Mapped[dict[str, Any]] = mapped_column(
         JSON_DOCUMENT, nullable=False
     )
+
+
+class AgentEvaluationRecord(Base):
+    __tablename__ = "ats_agent_evaluations"
+    __table_args__ = (
+        CheckConstraint(
+            "arm IN ('llm_only', 'llm_jev')",
+            name="ck_ats_agent_evaluation_arm",
+        ),
+        Index(
+            "ix_ats_agent_evaluation_lookup",
+            "experiment_id",
+            "arm",
+            "positive_label",
+            "as_of",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    experiment_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    arm: Mapped[str] = mapped_column(String(16), nullable=False)
+    positive_label: Mapped[str] = mapped_column(String(128), nullable=False)
+    evaluated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    observations: Mapped[int] = mapped_column(Integer, nullable=False)
+    summary_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
