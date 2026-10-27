@@ -2,9 +2,9 @@
 
 from datetime import datetime
 from decimal import (
+    ROUND_HALF_EVEN,
     Context,
     Decimal,
-    ROUND_HALF_EVEN,
     localcontext,
 )
 from enum import StrEnum
@@ -201,15 +201,10 @@ def _trade_identity(
     costs: BacktestCostModel,
     exit_observation: HistoricalExitObservation,
 ) -> tuple[str, UUID, UUID]:
-    payload = "|".join(
-        (
-            symbol,
-            context.digest,
-            trigger.model_dump_json(),
-            sizing.model_dump_json(),
-            costs.model_dump_json(),
-            exit_observation.model_dump_json(),
-        )
+    payload = (
+        f"{symbol}|{context.digest}|"
+        f"{trigger.model_dump_json()}|{sizing.model_dump_json()}|"
+        f"{costs.model_dump_json()}|{exit_observation.model_dump_json()}"
     )
     digest = sha256(payload.encode()).hexdigest()
     plan_id = uuid5(NAMESPACE_URL, f"ats-backtest-plan:{digest}")
