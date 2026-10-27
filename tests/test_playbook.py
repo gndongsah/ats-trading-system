@@ -11,7 +11,7 @@ def test_playbook_loads_version_and_weights_from_yaml():
             sum(factor.weight for factor in section.factors.values())
             == section.max_score
         )
-    assert set(rule.regime for rule in PLAYBOOK.regime.rules.values()) == {
+    assert {rule.regime for rule in PLAYBOOK.regime.rules.values()} == {
         1,
         2,
         3,
