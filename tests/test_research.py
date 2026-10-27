@@ -39,7 +39,9 @@ def make_source(**overrides) -> SourceDocument:
     return SourceDocument(**values)
 
 
-def verified_evidence(\n    source: SourceDocument, factor: str, **overrides\n) -> EvidenceItem:
+def verified_evidence(
+    source: SourceDocument, factor: str, **overrides
+) -> EvidenceItem:
     values = {
         "source_document_version_id": source.id,
         "subject": source.subject,
