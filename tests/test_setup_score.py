@@ -100,6 +100,8 @@ def test_setup_score_actionability_boundaries(total, expected_band):
         swing_long_screen=passing_screen(),
     )
 
+    assert result.trading_style is TradingStyle.SWING
+    assert result.side is TradeSide.LONG
     assert result.score == Decimal(total)
     assert result.score_band is expected_band
     assert result.actionability is expected_band

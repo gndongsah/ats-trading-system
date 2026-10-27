@@ -83,6 +83,8 @@ class SwingLongSetupScreen(SetupModel):
 
 class SetupScoreResult(SetupModel):
     as_of: datetime
+    trading_style: TradingStyle
+    side: TradeSide
     score: Decimal = Field(ge=ZERO, le=Decimal(100), allow_inf_nan=False)
     score_band: SetupActionability
     actionability: SetupActionability
@@ -189,6 +191,8 @@ def score_setup(
 
     return SetupScoreResult(
         as_of=as_of,
+        trading_style=trading_style,
+        side=side,
         score=score,
         score_band=band,
         actionability=actionability,

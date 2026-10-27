@@ -33,6 +33,10 @@ def test_playbook_loads_version_and_weights_from_yaml():
         "planned_size": 70,
         "unproven_size": 50,
     }
+    assert PLAYBOOK.swing_triggers.min_setup_score == 70
+    assert PLAYBOOK.swing_triggers.breakout_retest.stop_below_base_pct_min == 3
+    assert PLAYBOOK.swing_triggers.breakout_retest.stop_below_base_pct_max == 5
+    assert PLAYBOOK.swing_triggers.ema21_pullback.max_tap_number == 2
 
 
 def test_invalid_playbook_fails_with_clear_validation_error(tmp_path):
@@ -105,3 +109,29 @@ def test_invalid_setup_score_playbook_rejects_changed_swing_screen_limits(tmp_pa
 
     with pytest.raises(PlaybookValidationError, match="500k volume"):
         load_playbook(invalid_path)
+
+
+def test_invalid_swing_trigger_playbook_rejects_changed_numeric_rules(tmp_path):
+    playbook = yaml.safe_load(PLAYBOOK_PATH.read_text(encoding="utf-8"))
+    playbook["swing_triggers"]["min_setup_score"] = 69
+    invalid_score_path = tmp_path / "invalid-swing-trigger-score.yaml"
+    invalid_score_path.write_text(yaml.safe_dump(playbook), encoding="utf-8")
+
+    with pytest.raises(PlaybookValidationError, match="minimum Setup Score"):
+        load_playbook(invalid_score_path)
+
+    playbook = yaml.safe_load(PLAYBOOK_PATH.read_text(encoding="utf-8"))
+    playbook["swing_triggers"]["breakout_retest"]["stop_below_base_pct_min"] = 2
+    invalid_stop_path = tmp_path / "invalid-breakout-stop.yaml"
+    invalid_stop_path.write_text(yaml.safe_dump(playbook), encoding="utf-8")
+
+    with pytest.raises(PlaybookValidationError, match="3% to 5%"):
+        load_playbook(invalid_stop_path)
+
+    playbook = yaml.safe_load(PLAYBOOK_PATH.read_text(encoding="utf-8"))
+    playbook["swing_triggers"]["ema21_pullback"]["max_tap_number"] = 3
+    invalid_tap_path = tmp_path / "invalid-ema21-tap.yaml"
+    invalid_tap_path.write_text(yaml.safe_dump(playbook), encoding="utf-8")
+
+    with pytest.raises(PlaybookValidationError, match="max tap number"):
+        load_playbook(invalid_tap_path)
