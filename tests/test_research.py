@@ -134,9 +134,8 @@ def test_market_opportunity_uncited_factor_receives_zero_credit():
 
     assert result.allowed_factor_scores["structural_demand_growth"] == 0
     assert result.score == 0
-    assert (
-        result.eligibility["structural_demand_growth"].reason_codes
-        == (EligibilityReason.NO_EVIDENCE,)
+    assert result.eligibility["structural_demand_growth"].reason_codes == (
+        EligibilityReason.NO_EVIDENCE,
     )
 
 
