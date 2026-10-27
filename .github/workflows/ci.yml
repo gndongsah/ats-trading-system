@@ -70,3 +70,15 @@ jobs:
           name: replay-acceptance-report
           path: replay-acceptance.json
           if-no-files-found: warn
+
+      - name: PAPER MVP acceptance report
+        if: always()
+        run: python -m src.paper_mvp_acceptance --output paper-mvp-acceptance.json
+
+      - name: Upload PAPER MVP acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-mvp-acceptance-report
+          path: paper-mvp-acceptance.json
+          if-no-files-found: warn
