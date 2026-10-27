@@ -222,9 +222,7 @@ def _metrics(
 
     positive_r = sum((value for value in r_values if value > ZERO), ZERO)
     negative_r = sum((value for value in r_values if value < ZERO), ZERO)
-    profit_factor = (
-        _divide(positive_r, abs(negative_r)) if negative_r < ZERO else None
-    )
+    profit_factor = _divide(positive_r, abs(negative_r)) if negative_r < ZERO else None
 
     mae_values = tuple(
         outcome.trade_result.mae_r
