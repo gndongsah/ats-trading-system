@@ -180,4 +180,12 @@ class ProposalExecutionGate:
             reference_price=reference_price,
             submitted_at=at,
         )
+        self._operational_guard.validate(
+            request=request,
+            context=OperationalGuardContext(
+                evaluated_at=at,
+                market_data_observed_at=market_data_observed_at,
+                orders_submitted_today=orders_submitted_today,
+            ),
+        )
         return self._execution_service.submit(request)
