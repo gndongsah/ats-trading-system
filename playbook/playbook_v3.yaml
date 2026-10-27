@@ -143,3 +143,14 @@ setup_score:
     max_extension_pct_50dma: 10
     min_days_to_earnings: 10
 
+swing_triggers:
+  version: "1.0"
+  min_setup_score: 70
+
+  breakout_retest:
+    stop_below_base_pct_min: 3
+    stop_below_base_pct_max: 5
+
+  ema21_pullback:
+    max_tap_number: 2
+
