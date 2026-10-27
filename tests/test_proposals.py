@@ -160,7 +160,9 @@ def test_exact_human_approval_and_fresh_risk_can_reach_paper_adapter():
 
     receipt = gate.execute(
         proposal=proposal,
-        execution_authorization=execution_authorization_from_human_approval(approve(proposal)),
+        execution_authorization=execution_authorization_from_human_approval(
+            approve(proposal)
+        ),
         reference_price=Decimal(100),
         idempotency_key="proposal-1",
         at=NOW + timedelta(minutes=6),
@@ -220,7 +222,9 @@ def test_risk_must_be_rechecked_after_approval():
     with pytest.raises(PermissionError, match="after execution authorization"):
         gate.execute(
             proposal=proposal,
-            execution_authorization=execution_authorization_from_human_approval(approve(proposal)),
+            execution_authorization=execution_authorization_from_human_approval(
+            approve(proposal)
+        ),
             reference_price=Decimal(100),
             idempotency_key="stale-risk",
             at=NOW + timedelta(minutes=6),
@@ -247,7 +251,9 @@ def test_fresh_risk_denial_blocks_paper_execution():
     with pytest.raises(PermissionError, match="denied"):
         gate.execute(
             proposal=proposal,
-            execution_authorization=execution_authorization_from_human_approval(approve(proposal)),
+            execution_authorization=execution_authorization_from_human_approval(
+            approve(proposal)
+        ),
             reference_price=Decimal(100),
             idempotency_key="risk-denied",
             at=NOW + timedelta(minutes=6),
@@ -274,7 +280,9 @@ def test_fresh_resize_below_human_approved_size_fails_closed():
     with pytest.raises(PermissionError, match="approved size"):
         gate.execute(
             proposal=proposal,
-            execution_authorization=execution_authorization_from_human_approval(approve(proposal)),
+            execution_authorization=execution_authorization_from_human_approval(
+            approve(proposal)
+        ),
             reference_price=Decimal(100),
             idempotency_key="resize",
             at=NOW + timedelta(minutes=6),
@@ -315,7 +323,9 @@ def test_whole_share_gate_rejects_fractional_paper_quantity():
     with pytest.raises(PermissionError, match="whole-share"):
         gate.execute(
             proposal=fractional,
-            execution_authorization=execution_authorization_from_human_approval(approve(fractional)),
+            execution_authorization=execution_authorization_from_human_approval(
+                approve(fractional)
+            ),
             reference_price=Decimal(100),
             idempotency_key="fractional",
             at=NOW + timedelta(minutes=6),
