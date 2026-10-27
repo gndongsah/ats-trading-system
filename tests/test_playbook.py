@@ -21,8 +21,7 @@ def test_playbook_loads_version_and_weights_from_yaml():
     assert set(PLAYBOOK.regime.precedence) == set(PLAYBOOK.regime.rules)
     assert PLAYBOOK.setup_score.max_score == 100
     assert {
-        name: factor.weight
-        for name, factor in PLAYBOOK.setup_score.factors.items()
+        name: factor.weight for name, factor in PLAYBOOK.setup_score.factors.items()
     } == {
         "trend_alignment": 25,
         "relative_strength_vs_spy": 25,
