@@ -16,6 +16,29 @@ from pydantic import (
 
 PLAYBOOK_PATH = Path(__file__).resolve().parent.parent / "playbook" / "playbook_v3.yaml"
 
+REGIME_SIGNAL_NAMES = frozenset(
+    {
+        "spy_above_50dma",
+        "dma50_above_200dma",
+        "dma50_rising",
+        "dma200_rising",
+        "breadth_healthy",
+        "advancers_leading",
+        "new_highs_expanding",
+        "index_trending_up",
+        "breadth_deteriorating",
+        "leadership_concentrated",
+        "index_sideways_around_50dma",
+        "breadth_mixed",
+        "breakouts_failing_both_ways",
+        "spy_below_50dma",
+        "new_lows_expanding",
+        "breadth_washed_out",
+        "volatility_spiking",
+        "early_reclaim_attempts",
+    }
+)
+
 
 class PlaybookValidationError(ValueError):
     pass
@@ -82,12 +105,62 @@ class DiscoveryConfig(ScoreSection):
         return self
 
 
+class RegimeRuleConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    regime: int = Field(ge=1, le=5, strict=True)
+    requires: tuple[str, ...]
+
+    @field_validator("requires")
+    @classmethod
+    def validate_required_signals(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if not value:
+            raise ValueError("regime rule requires at least one signal")
+        normalized = tuple(signal.strip() for signal in value)
+        if any(not signal for signal in normalized):
+            raise ValueError("regime signal names must not be blank")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("regime rule cannot repeat required signals")
+        unknown = set(normalized) - REGIME_SIGNAL_NAMES
+        if unknown:
+            raise ValueError(
+                f"unknown regime signal(s): {', '.join(sorted(unknown))}"
+            )
+        return normalized
+
+
+class RegimeConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: str = Field(min_length=1)
+    precedence: tuple[str, ...]
+    rules: dict[str, RegimeRuleConfig]
+
+    @model_validator(mode="after")
+    def validate_rules(self) -> Self:
+        if not self.rules:
+            raise ValueError("at least one regime rule is required")
+        if any(not name.strip() for name in self.rules):
+            raise ValueError("regime rule names must not be blank")
+        if len(set(self.precedence)) != len(self.precedence):
+            raise ValueError("regime precedence cannot contain duplicates")
+        if set(self.precedence) != set(self.rules):
+            raise ValueError("regime precedence must list every configured rule once")
+        configured_regimes = [rule.regime for rule in self.rules.values()]
+        if len(set(configured_regimes)) != len(configured_regimes):
+            raise ValueError("each regime number must be configured exactly once")
+        if set(configured_regimes) != {1, 2, 3, 4, 5}:
+            raise ValueError("regime rules must configure regimes 1 through 5 exactly once")
+        return self
+
+
 class PlaybookConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     version: str = Field(min_length=1)
     market_opportunity: MarketOpportunityConfig
     discovery: DiscoveryConfig
+    regime: RegimeConfig
 
 
 def load_playbook(path: Path = PLAYBOOK_PATH) -> PlaybookConfig:
