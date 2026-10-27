@@ -161,7 +161,9 @@ class ProposalExecutionGate:
 
         requested_quantity = int(proposal.intent.quantity)
         if Decimal(requested_quantity) != proposal.intent.quantity:
-            raise PermissionError("paper execution currently requires whole-share quantity")
+            raise PermissionError(
+                "paper execution currently requires whole-share quantity"
+            )
         if fresh_risk.approved_quantity < requested_quantity:
             raise PermissionError("fresh risk check no longer supports approved size")
 
