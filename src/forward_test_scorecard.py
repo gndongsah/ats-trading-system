@@ -106,7 +106,9 @@ def _paper_journals_through(
         if entry.result is None or entry.result.closed_at.date() > trading_day:
             continue
         if entry.result.run_type is not RunType.PAPER:
-            raise ValueError(\n                "forward-test scorecard accepts PAPER journal outcomes only"\n            )
+            raise ValueError(
+                "forward-test scorecard accepts PAPER journal outcomes only"
+            )
         selected.append(entry)
     return tuple(sorted(selected, key=lambda item: item.result.closed_at))
 
@@ -118,7 +120,9 @@ def _average(values: list[Decimal]) -> Decimal | None:
 
 
 def _adherence(entries: tuple[JournalEntry, ...]) -> tuple[int, float | None]:
-    observed = [\n        entry.plan_followed for entry in entries if entry.plan_followed is not None\n    ]
+    observed = [
+        entry.plan_followed for entry in entries if entry.plan_followed is not None
+    ]
     if not observed:
         return 0, None
     return len(observed), sum(bool(value) for value in observed) / len(observed)
@@ -136,7 +140,9 @@ def _max_drawdown(entries: tuple[JournalEntry, ...]) -> Decimal:
     return max_drawdown
 
 
-def _performance_slice(\n    entries: tuple[JournalEntry, ...], *, setup: str, regime: int\n) -> PerformanceSlice:
+def _performance_slice(
+    entries: tuple[JournalEntry, ...], *, setup: str, regime: int
+) -> PerformanceSlice:
     results = [entry.result for entry in entries if entry.result is not None]
     total_r = sum((result.r_multiple for result in results), ZERO)
     maes = [result.mae_r for result in results if result.mae_r is not None]
@@ -156,7 +162,9 @@ def _performance_slice(\n    entries: tuple[JournalEntry, ...], *, setup: str, r
     )
 
 
-def _group_performance(\n    entries: tuple[JournalEntry, ...],\n) -> tuple[PerformanceSlice, ...]:
+def _group_performance(
+    entries: tuple[JournalEntry, ...],
+) -> tuple[PerformanceSlice, ...]:
     grouped: dict[tuple[str, int], list[JournalEntry]] = defaultdict(list)
     for entry in entries:
         setup = entry.plan.setup_type.value
