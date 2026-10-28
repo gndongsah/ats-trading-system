@@ -92,7 +92,7 @@ def journal(
         plan=plan,
         result=result,
         plan_followed=followed,
-        created_at=plan.planned_at,
+        created_at=closed,
     )
 
 
