@@ -63,7 +63,7 @@ class ForwardTestRunInput(BaseModel):
         if event.symbol != self.proposal.plan.security.ticker:
             raise ValueError("market observation symbol must match proposal")
         if not isinstance(event.payload, Bar):
-            raise ValueError("forward-test execution requires a bar observation")
+            raise TypeError("forward-test execution requires a bar observation")
         if event.event_time > self.as_of:
             raise ValueError("market event is in the future")
         if event.available_at > self.as_of:
