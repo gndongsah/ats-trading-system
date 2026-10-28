@@ -581,3 +581,31 @@ class AgentEvaluationRecord(Base):
     as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     observations: Mapped[int] = mapped_column(Integer, nullable=False)
     summary_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
+
+
+class ForwardTestRunRecord(Base):
+    __tablename__ = "ats_forward_test_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "run_type = 'PAPER'",
+            name="ck_ats_forward_test_run_type",
+        ),
+        CheckConstraint(
+            "status IN ('BLOCKED', 'ACCEPTED', 'FILLED')",
+            name="ck_ats_forward_test_status",
+        ),
+        Index(
+            "ix_ats_forward_test_as_of",
+            "as_of",
+            "status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    proposal_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    run_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    playbook_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    playbook_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    run_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
