@@ -46,7 +46,7 @@ def run(status, *, approval="APPROVE", reason=None, minutes=0):
     )
 
 
-def journal(r_value, *, regime=1, setup=SetupType.BREAKOUT, followed=True, mae="0.5", mfe="2.0", days=0):
+def journal(\n    r_value,\n    *,\n    regime=1,\n    setup=SetupType.BREAKOUT,\n    followed=True,\n    mae="0.5",\n    mfe="2.0",\n    days=0,\n):
     closed = AT + timedelta(days=days)
     plan = TradePlan(
         security=SecurityRef(ticker="ABC"),
@@ -122,8 +122,8 @@ def test_daily_scorecard_reports_flow_and_cumulative_performance():
         trading_day=DAY,
         run_evidence=(
             run(ForwardTestRunStatus.FILLED),
-            run(ForwardTestRunStatus.BLOCKED, approval="REJECT", reason="PermissionError:rejected proposal cannot authorize execution"),
-            run(ForwardTestRunStatus.BLOCKED, reason="PermissionError:fresh risk check denied the proposal"),
+            run(\n                ForwardTestRunStatus.BLOCKED,\n                approval="REJECT",\n                reason="PermissionError:rejected proposal cannot authorize execution",\n            ),
+            run(\n                ForwardTestRunStatus.BLOCKED,\n                reason="PermissionError:fresh risk check denied the proposal",\n            ),
             run(ForwardTestRunStatus.BLOCKED, reason="ValueError:market data is stale"),
         ),
         journals=(
