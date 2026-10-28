@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import create_engine
