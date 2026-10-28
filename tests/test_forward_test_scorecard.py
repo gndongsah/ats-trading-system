@@ -21,7 +21,6 @@ from src.forward_test_scorecard import build_forward_test_daily_scorecard
 from src.jev_experiment import CalibrationSummary, ExperimentArm
 from src.run_type import RunType
 
-
 DAY = date(2026, 10, 27)
 AT = datetime(2026, 10, 27, 15, 0, tzinfo=UTC)
 
