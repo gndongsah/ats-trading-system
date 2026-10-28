@@ -12,7 +12,6 @@ from src.domain.models import JournalEntry
 from src.forward_test import ForwardTestRunEvidence, ForwardTestRunStatus
 from src.run_type import RunType
 
-
 ZERO = Decimal(0)
 
 
