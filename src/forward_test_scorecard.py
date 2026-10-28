@@ -6,7 +6,6 @@ from decimal import Decimal
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
-
 from src.agent_evaluation import AgentEvaluationSummary
 from src.domain.models import JournalEntry
 from src.forward_test import ForwardTestRunEvidence, ForwardTestRunStatus
