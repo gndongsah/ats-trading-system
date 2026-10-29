@@ -142,7 +142,10 @@ def test_weekly_report_aggregates_flow_performance_and_slices():
             scorecard(DAY, proposals=3, risk=1, fills=1),
             scorecard(DAY + timedelta(days=1), proposals=2, guard=1, fills=1),
         ),
-        run_evidence=(run(), run(day_offset=1, reason="ValueError:market data is stale")),
+        run_evidence=(
+            run(),
+            run(day_offset=1, reason="ValueError:market data is stale"),
+        ),
         journals=(
             journal("2.0", followed=True, mae="0.25", mfe="3"),
             journal("-1.0", followed=False, mae="1", mfe="0.5"),
@@ -273,9 +276,7 @@ def test_non_paper_evidence_is_rejected(source):
             scorecard(DAY).model_copy(update={"run_type": RunType.LIVE}),
         )
     elif source == "run":
-        kwargs["run_evidence"] = (
-            run().model_copy(update={"run_type": RunType.LIVE}),
-        )
+        kwargs["run_evidence"] = (run().model_copy(update={"run_type": RunType.LIVE}),)
     else:
         entry = journal("1.0")
         kwargs["journals"] = (
