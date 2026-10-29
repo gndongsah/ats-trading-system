@@ -104,7 +104,9 @@ def _max_drawdown(entries: tuple[JournalEntry, ...]) -> Decimal:
 
 
 def _adherence(entries: tuple[JournalEntry, ...]) -> tuple[int, float | None]:
-    values = [entry.plan_followed for entry in entries if entry.plan_followed is not None]
+    values = [
+        entry.plan_followed for entry in entries if entry.plan_followed is not None
+    ]
     if not values:
         return 0, None
     return len(values), sum(bool(value) for value in values) / len(values)
@@ -138,9 +140,9 @@ def _group_performance(
 ) -> tuple[CampaignPerformanceSlice, ...]:
     grouped: dict[tuple[str, int], list[JournalEntry]] = defaultdict(list)
     for entry in entries:
-        grouped[(entry.plan.setup_type.value, entry.plan.score_snapshot.regime_score)].append(
-            entry
-        )
+        grouped[
+            (entry.plan.setup_type.value, entry.plan.score_snapshot.regime_score)
+        ].append(entry)
     return tuple(
         sorted(
             (
