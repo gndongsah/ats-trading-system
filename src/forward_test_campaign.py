@@ -8,12 +8,22 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.domain.models import _require_utc
-from src.forward_test import playbook_digest
 from src.playbook import PLAYBOOK, PlaybookConfig
 from src.run_type import RunType
 
 MIN_CAMPAIGN_DURATION = timedelta(weeks=8)
 MAX_CAMPAIGN_DURATION = timedelta(weeks=12)
+
+
+def playbook_digest(playbook: PlaybookConfig) -> str:
+    """Return the canonical digest used to freeze campaign Playbook identity."""
+
+    payload = json.dumps(
+        playbook.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return sha256(payload.encode("utf-8")).hexdigest()
 
 
 class ForwardTestCampaignManifest(BaseModel):
@@ -102,8 +112,11 @@ def validate_campaign_preflight(
     manifest: ForwardTestCampaignManifest,
     *,
     playbook: PlaybookConfig = PLAYBOOK,
+    operational_policy_version: str | None = None,
+    as_of: datetime | None = None,
+    setup: str | None = None,
 ) -> str:
-    """Fail closed if a stored campaign identity no longer matches policy."""
+    """Fail closed when campaign identity or run scope no longer matches."""
 
     if manifest.run_type is not RunType.PAPER:
         raise PermissionError("forward-test campaign must remain PAPER-only")
@@ -111,4 +124,15 @@ def validate_campaign_preflight(
         raise PermissionError("forward-test campaign playbook version drift")
     if manifest.playbook_digest != playbook_digest(playbook):
         raise PermissionError("forward-test campaign playbook digest drift")
+    if (
+        operational_policy_version is not None
+        and operational_policy_version != manifest.operational_policy_version
+    ):
+        raise PermissionError("forward-test campaign operational policy drift")
+    if as_of is not None:
+        checked_at = _require_utc(as_of)
+        if checked_at < manifest.start_at or checked_at > manifest.end_at:
+            raise PermissionError("forward-test run is outside campaign window")
+    if setup is not None and setup not in manifest.setup_scope:
+        raise PermissionError("forward-test setup is outside campaign scope")
     return campaign_manifest_digest(manifest)
