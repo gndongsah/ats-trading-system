@@ -121,8 +121,7 @@ def _setup_readiness(
         sample_ready = closed >= MIN_TRADES_PER_SETUP
         expectancy_ready = expectancy is not None and expectancy > ZERO
         adherence_ready = (
-            adherence_rate is not None
-            and adherence_rate > MIN_ADHERENCE_EXCLUSIVE
+            adherence_rate is not None and adherence_rate > MIN_ADHERENCE_EXCLUSIVE
         )
         output.append(
             SetupReadiness(
