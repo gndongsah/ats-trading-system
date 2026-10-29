@@ -54,7 +54,7 @@ def campaign():
         created_at=CAMPAIGN_START - timedelta(minutes=5),
         start_at=CAMPAIGN_START,
         end_at=CAMPAIGN_START + timedelta(weeks=8),
-        setup_scope=("BREAKOUT",),
+        setup_scope=("breakout",),
         operational_policy_version="ops-v1",
     )
 
