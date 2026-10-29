@@ -1,18 +1,21 @@
 """ATS-034 reproducible PAPER forward-test weekly and campaign reporting."""
 
+import json
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from hashlib import sha256
-import json
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.domain.models import JournalEntry
 from src.forward_test import ForwardTestRunEvidence, ForwardTestRunStatus
-from src.forward_test_campaign import ForwardTestCampaignManifest, campaign_manifest_digest
+from src.forward_test_campaign import (
+    ForwardTestCampaignManifest,
+    campaign_manifest_digest,
+)
 from src.forward_test_scorecard import ForwardTestDailyScorecard
 from src.run_type import RunType
 
