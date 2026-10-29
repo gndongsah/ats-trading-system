@@ -174,9 +174,7 @@ def test_gate_fails_immediately_on_risk_gate_breach():
 
 def test_gate_fails_immediately_on_integrity_exception():
     generated = START + timedelta(weeks=4)
-    exceptions = (
-        EvidenceIntegrityException(code="DUPLICATE_RUN_ID", detail="run-1"),
-    )
+    exceptions = (EvidenceIntegrityException(code="DUPLICATE_RUN_ID", detail="run-1"),)
 
     result = evaluate_forward_test_readiness(
         campaign=CAMPAIGN,
