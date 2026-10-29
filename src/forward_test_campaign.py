@@ -38,7 +38,7 @@ class ForwardTestCampaignManifest(BaseModel):
     end_at: datetime
     playbook_version: str = Field(min_length=1)
     playbook_digest: str = Field(min_length=64, max_length=64)
-    operational_policy_version: str = Field(min_length=1)
+    operational_policy_version: str = Field(min_length=1, max_length=64)
     setup_scope: tuple[str, ...]
 
     @field_validator("created_at", "start_at", "end_at")
