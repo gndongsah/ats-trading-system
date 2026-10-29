@@ -59,11 +59,17 @@ def scorecard(day: date, *, proposals=2, risk=1, guard=0, fills=1):
     )
 
 
-def run(*, day_offset=0, reason="PermissionError:fresh risk check denied the proposal"):
+def run(
+    *,
+    day_offset=0,
+    reason="PermissionError:fresh risk check denied the proposal",
+    status=ForwardTestRunStatus.BLOCKED,
+    risk_gate_breach=False,
+):
     at = START + timedelta(days=day_offset, hours=1)
     return ForwardTestRunEvidence(
         run_id=uuid4(),
-        status=ForwardTestRunStatus.BLOCKED,
+        status=status,
         as_of=at,
         proposal_id=uuid4(),
         proposal_fingerprint="a" * 64,
@@ -80,6 +86,7 @@ def run(*, day_offset=0, reason="PermissionError:fresh risk check denied the pro
         market_available_at=at - timedelta(seconds=50),
         market_ingested_at=at - timedelta(seconds=40),
         blocked_reason=reason,
+        risk_gate_breach=risk_gate_breach,
     )
 
 
@@ -143,7 +150,11 @@ def test_weekly_report_aggregates_flow_performance_and_slices():
             scorecard(DAY + timedelta(days=1), proposals=2, guard=1, fills=1),
         ),
         run_evidence=(
-            run(),
+            run(
+                status=ForwardTestRunStatus.FILLED,
+                reason=None,
+                risk_gate_breach=True,
+            ),
             run(day_offset=1, reason="ValueError:market data is stale"),
         ),
         journals=(
@@ -303,3 +314,17 @@ def test_mismatched_campaign_identity_is_rejected():
             run_evidence=(bad,),
             journals=(),
         )
+
+
+def test_normal_risk_denial_is_not_a_risk_gate_breach():
+    result = build_weekly_forward_test_report(
+        campaign=CAMPAIGN,
+        week_start=DAY,
+        as_of=START + timedelta(days=6),
+        scorecards=(scorecard(DAY, risk=1),),
+        run_evidence=(run(),),
+        journals=(),
+    )
+
+    assert result.risk_denials == 1
+    assert result.risk_gate_breaches == 0
