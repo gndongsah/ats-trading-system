@@ -68,7 +68,9 @@ class ForwardTestCampaignManifest(BaseModel):
         if duration < MIN_CAMPAIGN_DURATION or duration > MAX_CAMPAIGN_DURATION:
             raise ValueError("campaign duration must be between 8 and 12 weeks")
         if self.created_at > self.start_at:
-            raise ValueError(\n                "campaign manifest must be created no later than campaign start"\n            )
+            raise ValueError(
+                "campaign manifest must be created no later than campaign start"
+            )
         return self
 
 
