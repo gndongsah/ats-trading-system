@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -67,7 +68,7 @@ class ForwardTestReadinessEvaluation(BaseModel):
 
     decision: ForwardTestGateDecision
     evaluated_at: datetime
-    campaign_id: str
+    campaign_id: UUID
     campaign_digest: str = Field(min_length=64, max_length=64)
     report_digest: str = Field(min_length=64, max_length=64)
     elapsed_days: int = Field(ge=0)
@@ -158,6 +159,14 @@ def evaluate_forward_test_readiness(
         raise ValueError("readiness report belongs to a different campaign")
     if report.campaign_digest != expected_digest:
         raise ValueError("readiness report campaign digest mismatch")
+    if report.period_start != campaign.start_at.date():
+        raise ValueError("readiness report must start at campaign start")
+    expected_period_end = min(
+        campaign.end_at.date(),
+        report.generated_as_of.astimezone(UTC).date(),
+    )
+    if report.period_end != expected_period_end:
+        raise ValueError("readiness report does not cover its full campaign window")
 
     evaluated = evaluated_at or report.generated_as_of
     if evaluated.tzinfo is None or evaluated.utcoffset() is None:
@@ -233,7 +242,7 @@ def evaluate_forward_test_readiness(
     return ForwardTestReadinessEvaluation(
         decision=decision,
         evaluated_at=evaluated,
-        campaign_id=str(campaign.campaign_id),
+        campaign_id=campaign.campaign_id,
         campaign_digest=expected_digest,
         report_digest=report.report_digest,
         elapsed_days=elapsed.days,
