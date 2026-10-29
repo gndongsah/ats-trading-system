@@ -155,7 +155,8 @@ def test_weekly_report_aggregates_flow_performance_and_slices():
                 reason=None,
                 risk_gate_breach=True,
             ),
-            run(day_offset=1, reason="ValueError:market data is stale"),\n        ),
+            run(day_offset=1, reason="ValueError:market data is stale"),
+        ),
         journals=(
             journal("2.0", followed=True, mae="0.25", mfe="3"),
             journal("-1.0", followed=False, mae="1", mfe="0.5"),
