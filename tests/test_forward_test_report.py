@@ -59,7 +59,14 @@ def scorecard(day: date, *, proposals=2, risk=1, guard=0, fills=1):
     )
 
 
-def run(\n    *,\n    day_offset=0,\n    reason="PermissionError:fresh risk check denied the proposal",\n    status=ForwardTestRunStatus.BLOCKED,\n    risk_gate_breach=False,\n):\n    at = START + timedelta(days=day_offset, hours=1)
+def run(
+    *,
+    day_offset=0,
+    reason="PermissionError:fresh risk check denied the proposal",
+    status=ForwardTestRunStatus.BLOCKED,
+    risk_gate_breach=False,
+):
+    at = START + timedelta(days=day_offset, hours=1)
     return ForwardTestRunEvidence(
         run_id=uuid4(),
         status=status,
@@ -143,7 +150,12 @@ def test_weekly_report_aggregates_flow_performance_and_slices():
             scorecard(DAY + timedelta(days=1), proposals=2, guard=1, fills=1),
         ),
         run_evidence=(
-            run(\n                status=ForwardTestRunStatus.FILLED,\n                reason=None,\n                risk_gate_breach=True,\n            ),\n            run(day_offset=1, reason="ValueError:market data is stale"),\n        ),
+            run(
+                status=ForwardTestRunStatus.FILLED,
+                reason=None,
+                risk_gate_breach=True,
+            ),
+            run(day_offset=1, reason="ValueError:market data is stale"),\n        ),
         journals=(
             journal("2.0", followed=True, mae="0.25", mfe="3"),
             journal("-1.0", followed=False, mae="1", mfe="0.5"),
