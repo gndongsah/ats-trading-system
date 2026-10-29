@@ -51,7 +51,7 @@ class ForwardTestCampaignManifest(BaseModel):
     def setup_scope_is_nonempty_unique(
         cls, value: tuple[str, ...]
     ) -> tuple[str, ...]:
-        normalized = tuple(item.strip() for item in value)
+        normalized = tuple(item.strip().casefold() for item in value)
         if not normalized:
             raise ValueError("forward-test campaign requires at least one setup")
         if any(not item for item in normalized):
