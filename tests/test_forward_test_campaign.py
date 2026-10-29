@@ -2,13 +2,18 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
+from src.database import Base
 from src.forward_test_campaign import (
     ForwardTestCampaignManifest,
     build_forward_test_campaign,
     campaign_manifest_digest,
     validate_campaign_preflight,
 )
+from src.persistence.forward_test_repository import ForwardTestCampaignRepository
+from src.persistence.repository import PersistenceConflict
 from src.playbook import PLAYBOOK
 from src.run_type import RunType
 
@@ -32,7 +37,7 @@ def test_build_campaign_freezes_paper_playbook_identity():
     assert manifest.run_type is RunType.PAPER
     assert manifest.playbook_version == PLAYBOOK.version
     assert len(manifest.playbook_digest) == 64
-    assert manifest.setup_scope == ("BREAKOUT", "PULLBACK")
+    assert manifest.setup_scope == ("breakout", "pullback")
     assert validate_campaign_preflight(manifest) == campaign_manifest_digest(manifest)
 
 
@@ -47,7 +52,7 @@ def test_campaign_rejects_duration_outside_eight_to_twelve_weeks(weeks):
     [
         ((), "at least one setup"),
         (("BREAKOUT", ""), "must not be blank"),
-        (("BREAKOUT", "BREAKOUT"), "cannot contain duplicates"),
+        (("BREAKOUT", "breakout"), "cannot contain duplicates"),
     ],
 )
 def test_campaign_rejects_invalid_setup_scope(setups, message):
@@ -72,10 +77,38 @@ def test_preflight_rejects_playbook_identity_drift():
         validate_campaign_preflight(manifest, playbook=drifted)
 
 
+def test_preflight_rejects_operational_policy_drift():
+    manifest = campaign()
+
+    with pytest.raises(PermissionError, match="operational policy drift"):
+        validate_campaign_preflight(
+            manifest,
+            operational_policy_version="ops-v2",
+        )
+
+
+def test_preflight_rejects_out_of_window_and_out_of_scope_runs():
+    manifest = campaign()
+
+    with pytest.raises(PermissionError, match="outside campaign window"):
+        validate_campaign_preflight(
+            manifest,
+            as_of=START - timedelta(seconds=1),
+            setup="breakout",
+        )
+
+    with pytest.raises(PermissionError, match="outside campaign scope"):
+        validate_campaign_preflight(
+            manifest,
+            as_of=START,
+            setup="reversal",
+        )
+
+
 def test_manifest_digest_is_stable_and_sensitive_to_scope():
     first = campaign()
     same = ForwardTestCampaignManifest.model_validate(first.model_dump(mode="python"))
-    changed = first.model_copy(update={"setup_scope": ("BREAKOUT",)})
+    changed = first.model_copy(update={"setup_scope": ("breakout",)})
 
     assert campaign_manifest_digest(first) == campaign_manifest_digest(same)
     assert campaign_manifest_digest(first) != campaign_manifest_digest(changed)
@@ -89,6 +122,27 @@ def test_campaign_requires_utc_timestamps():
             created_at=CREATED,
             start_at=naive_start,
             end_at=START + timedelta(weeks=8),
-            setup_scope=("BREAKOUT",),
+            setup_scope=("breakout",),
             operational_policy_version="ops-v1",
         )
+
+
+def test_campaign_repository_round_trip_is_idempotent_and_immutable():
+    manifest = campaign()
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        repository = ForwardTestCampaignRepository(session)
+        digest = repository.save(manifest)
+        assert repository.save(manifest) == digest
+        session.commit()
+
+        restored = repository.get(manifest.campaign_id)
+
+        changed = manifest.model_copy(update={"setup_scope": ("breakout",)})
+        with pytest.raises(PersistenceConflict, match="already exists"):
+            repository.save(changed)
+
+    assert restored == manifest
+    assert digest == campaign_manifest_digest(manifest)
