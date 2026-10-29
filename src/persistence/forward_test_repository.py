@@ -59,8 +59,16 @@ class ForwardTestCampaignRepository:
         data["start_at"] = _as_utc(row.start_at)
         data["end_at"] = _as_utc(row.end_at)
         manifest = ForwardTestCampaignManifest.model_validate(data)
-        if campaign_manifest_digest(manifest) != row.manifest_digest:
+        digest = campaign_manifest_digest(manifest)
+        if digest != row.manifest_digest:
             raise PersistenceConflict("forward-test campaign digest mismatch")
+        if (
+            row.run_type != manifest.run_type.value
+            or row.playbook_version != manifest.playbook_version
+            or row.playbook_digest != manifest.playbook_digest
+            or row.operational_policy_version != manifest.operational_policy_version
+        ):
+            raise PersistenceConflict("forward-test campaign columns mismatch manifest")
         return manifest
 
 
@@ -103,9 +111,7 @@ class ForwardTestRunRepository:
         row = self._session.get(ForwardTestRunRecord, run_id)
         if row is None:
             return None
-        data = dict(row.run_data)
-        data["as_of"] = _as_utc(row.as_of)
-        return ForwardTestRunEvidence.model_validate(data)
+        return self._restore(row)
 
     def list_between(
         self,
@@ -144,4 +150,10 @@ class ForwardTestRunRepository:
     def _restore(row: ForwardTestRunRecord) -> ForwardTestRunEvidence:
         data = dict(row.run_data)
         data["as_of"] = _as_utc(row.as_of)
-        return ForwardTestRunEvidence.model_validate(data)
+        evidence = ForwardTestRunEvidence.model_validate(data)
+        if (
+            row.campaign_id != evidence.campaign_id
+            or row.campaign_digest != evidence.campaign_digest
+        ):
+            raise PersistenceConflict("forward-test run campaign binding mismatch")
+        return evidence
