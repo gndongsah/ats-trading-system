@@ -29,8 +29,9 @@ ALLOWED_SDK_MODULES = {
     "webull.core.client",
     "webull.trade.trade_client",
     "webull.core.http.response",
+    "webull.data.data_client",
 }
-ALLOWED_CLIENT_ATTRIBUTES = {"account_v2", "activity"}
+ALLOWED_CLIENT_ATTRIBUTES = {"account_v2", "activity", "market_data"}
 SDK_CLIENT_NAMES = {"trade_client", "client"}
 SDK_API_ATTRIBUTES = {"_account_api", "_activity_api", "_api"}
 ALLOWED_SDK_OPERATIONS = {
