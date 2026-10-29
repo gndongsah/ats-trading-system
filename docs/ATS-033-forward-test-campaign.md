@@ -11,7 +11,7 @@ ATS-033 moves the accepted ATS-031/032 PAPER forward-test infrastructure into a 
 - creation, start and end timestamps;
 - an 8–12 week evidence window;
 - Playbook version and canonical SHA-256 digest;
-- operational-policy version;
+- operational-policy version, read from the actual bound operational guard;
 - normalized setup scope.
 
 `campaign_manifest_digest()` produces a deterministic digest used by both campaign persistence and every newly orchestrated forward-test run.
