@@ -314,3 +314,17 @@ def test_mismatched_campaign_identity_is_rejected():
             run_evidence=(bad,),
             journals=(),
         )
+
+
+def test_normal_risk_denial_is_not_a_risk_gate_breach():
+    result = build_weekly_forward_test_report(
+        campaign=CAMPAIGN,
+        week_start=DAY,
+        as_of=START + timedelta(days=6),
+        scorecards=(scorecard(DAY, risk=1),),
+        run_evidence=(run(),),
+        journals=(),
+    )
+
+    assert result.risk_denials == 1
+    assert result.risk_gate_breaches == 0
