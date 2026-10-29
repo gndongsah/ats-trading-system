@@ -11,7 +11,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.domain.models import JournalEntry
-from src.forward_test import ForwardTestRunEvidence, ForwardTestRunStatus
+from src.forward_test import ForwardTestRunEvidence
 from src.forward_test_campaign import (
     ForwardTestCampaignManifest,
     campaign_manifest_digest,
