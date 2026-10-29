@@ -29,6 +29,7 @@ class XnysMarketHours:
 class OperationalGuardPolicy(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    version: str = Field(default="ops-v1", min_length=1, max_length=64)
     kill_switch_engaged: bool = False
     max_order_quantity: Decimal = Field(gt=0)
     max_order_notional: Decimal = Field(gt=0)
@@ -62,6 +63,10 @@ class OperationalGuard:
     ) -> None:
         self._policy = policy
         self._market_hours = market_hours or XnysMarketHours()
+
+    @property
+    def policy_version(self) -> str:
+        return self._policy.version
 
     def validate(
         self,
