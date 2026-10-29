@@ -209,7 +209,6 @@ def orchestrator(candidate, *, max_age=timedelta(minutes=2), playbook=None):
         journal_service=PaperFillJournalService(journal_repo),
         run_repository=run_repo,
         campaign=campaign(),
-        operational_policy_version="ops-v1",
         playbook=playbook or PLAYBOOK,
     )
     return service, risk, journal_repo, run_repo
@@ -376,6 +375,7 @@ def test_campaign_operational_policy_drift_blocks_before_risk_or_broker():
             execution_service=ExecutionService(PaperBrokerAdapter()),
             operational_guard=OperationalGuard(
                 policy=OperationalGuardPolicy(
+                    version="ops-v2",
                     max_order_quantity=Decimal(100),
                     max_order_notional=Decimal(20_000),
                     max_orders_per_day=10,
@@ -386,7 +386,6 @@ def test_campaign_operational_policy_drift_blocks_before_risk_or_broker():
         journal_service=PaperFillJournalService(journal_repo),
         run_repository=run_repo,
         campaign=campaign(),
-        operational_policy_version="ops-v2",
     )
 
     result = service.run(request(candidate))
