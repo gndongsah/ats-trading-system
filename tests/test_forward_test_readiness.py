@@ -274,3 +274,36 @@ def test_evaluation_cannot_precede_report_generation():
             report=campaign_report,
             evaluated_at=CAMPAIGN.end_at - timedelta(seconds=1),
         )
+
+
+def test_non_positive_expectancy_fails_at_campaign_end():
+    slices = (
+        performance("breakout", cumulative_r="0"),
+        performance("pullback"),
+    )
+
+    result = evaluate_forward_test_readiness(
+        campaign=CAMPAIGN,
+        report=report(slices=slices),
+    )
+
+    breakout = next(item for item in result.setup_readiness if item.setup == "breakout")
+    assert breakout.expectancy_after_costs_r == Decimal(0)
+    assert not breakout.expectancy_ready
+    assert result.decision is ForwardTestGateDecision.FAIL
+    assert ForwardTestGateReason.NON_POSITIVE_EXPECTANCY in result.reasons
+
+
+def test_gate_rejects_partial_campaign_report_window():
+    partial = report().model_copy(
+        update={"period_start": CAMPAIGN.start_at.date() + timedelta(days=1)}
+    )
+
+    with pytest.raises(ValueError, match="start at campaign start"):
+        evaluate_forward_test_readiness(campaign=CAMPAIGN, report=partial)
+
+    truncated = report().model_copy(
+        update={"period_end": CAMPAIGN.end_at.date() - timedelta(days=1)}
+    )
+    with pytest.raises(ValueError, match="full campaign window"):
+        evaluate_forward_test_readiness(campaign=CAMPAIGN, report=truncated)
