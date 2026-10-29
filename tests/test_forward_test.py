@@ -401,9 +401,7 @@ def test_campaign_scope_blocks_unapproved_setup_before_risk_or_broker():
     candidate = proposal()
     candidate = candidate.model_copy(
         update={
-            "plan": candidate.plan.model_copy(
-                update={"setup_type": SetupType.PULLBACK}
-            )
+            "plan": candidate.plan.model_copy(update={"setup_type": SetupType.PULLBACK})
         }
     )
     service, risk, journal_repo, run_repo = orchestrator(candidate)
