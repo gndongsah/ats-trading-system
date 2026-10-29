@@ -27,7 +27,6 @@ from src.proposals import (
 from src.run_type import RunType
 
 
-
 class ForwardTestRunStatus(StrEnum):
     BLOCKED = "BLOCKED"
     ACCEPTED = "ACCEPTED"
