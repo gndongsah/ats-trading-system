@@ -104,6 +104,7 @@ class ForwardTestRunEvidence(BaseModel):
     manual_step_types: tuple[str, ...] = ("HUMAN_APPROVAL",)
     live_execution_used: bool = False
     autonomy_policy_used: bool = False
+    risk_gate_breach: bool = False
 
     @field_validator(
         "as_of",
