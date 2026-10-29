@@ -140,7 +140,6 @@ class ForwardTestOrchestrator:
         journal_service: PaperFillJournalService,
         run_repository: ForwardTestRunRepositoryProtocol,
         campaign: ForwardTestCampaignManifest,
-        operational_policy_version: str,
         playbook: PlaybookConfig = PLAYBOOK,
     ) -> None:
         self._execution_gate = execution_gate
@@ -148,7 +147,7 @@ class ForwardTestOrchestrator:
         self._run_repository = run_repository
         self._campaign = campaign
         self._campaign_digest = campaign_manifest_digest(campaign)
-        self._operational_policy_version = operational_policy_version
+        self._operational_policy_version = execution_gate.operational_policy_version
         self._playbook = playbook
         self._frozen_playbook_version = playbook.version
         self._frozen_playbook_digest = playbook_digest(playbook)
