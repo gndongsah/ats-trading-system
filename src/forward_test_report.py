@@ -155,19 +155,7 @@ def _group_performance(
 
 
 def _risk_gate_breach(evidence: ForwardTestRunEvidence) -> bool:
-    if evidence.status is not ForwardTestRunStatus.BLOCKED:
-        return False
-    reason = (evidence.blocked_reason or "").casefold()
-    return any(
-        token in reason
-        for token in (
-            "risk",
-            "loss lock",
-            "portfolio heat",
-            "capacity",
-            "reservation",
-        )
-    )
+    return evidence.risk_gate_breach
 
 
 def _validate_and_select(
