@@ -172,6 +172,21 @@ class ForwardTestOrchestrator:
             "market_ingested_at": request.market_observation.ingested_at,
         }
 
+        if (
+            self._playbook.version != self._frozen_playbook_version
+            or current_digest != self._frozen_playbook_digest
+        ):
+            evidence = ForwardTestRunEvidence(
+                **common,
+                status=ForwardTestRunStatus.BLOCKED,
+                blocked_reason="PLAYBOOK_POLICY_DRIFT",
+            )
+            self._run_repository.save(evidence)
+            return ForwardTestRunResult(
+                evidence=evidence,
+                journal_entry=request.journal_entry,
+            )
+
         try:
             validate_campaign_preflight(
                 self._campaign,
@@ -185,21 +200,6 @@ class ForwardTestOrchestrator:
                 **common,
                 status=ForwardTestRunStatus.BLOCKED,
                 blocked_reason=f"CAMPAIGN_PREFLIGHT:{exc}",
-            )
-            self._run_repository.save(evidence)
-            return ForwardTestRunResult(
-                evidence=evidence,
-                journal_entry=request.journal_entry,
-            )
-
-        if (
-            self._playbook.version != self._frozen_playbook_version
-            or current_digest != self._frozen_playbook_digest
-        ):
-            evidence = ForwardTestRunEvidence(
-                **common,
-                status=ForwardTestRunStatus.BLOCKED,
-                blocked_reason="PLAYBOOK_POLICY_DRIFT",
             )
             self._run_repository.save(evidence)
             return ForwardTestRunResult(
