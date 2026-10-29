@@ -583,6 +583,40 @@ class AgentEvaluationRecord(Base):
     summary_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
 
 
+class ForwardTestCampaignRecord(Base):
+    __tablename__ = "ats_forward_test_campaigns"
+    __table_args__ = (
+        CheckConstraint(
+            "run_type = 'PAPER'",
+            name="ck_ats_forward_test_campaign_run_type",
+        ),
+        CheckConstraint(
+            "end_at > start_at",
+            name="ck_ats_forward_test_campaign_window",
+        ),
+        UniqueConstraint(
+            "manifest_digest",
+            name="uq_ats_forward_test_campaign_manifest_digest",
+        ),
+        Index(
+            "ix_ats_forward_test_campaign_window",
+            "start_at",
+            "end_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    run_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    playbook_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    playbook_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    operational_policy_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    manifest_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    manifest_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
+
+
 class ForwardTestRunRecord(Base):
     __tablename__ = "ats_forward_test_runs"
     __table_args__ = (
@@ -594,15 +628,31 @@ class ForwardTestRunRecord(Base):
             "status IN ('BLOCKED', 'ACCEPTED', 'FILLED')",
             name="ck_ats_forward_test_status",
         ),
+        CheckConstraint(
+            "(campaign_id IS NULL AND campaign_digest IS NULL) OR "
+            "(campaign_id IS NOT NULL AND campaign_digest IS NOT NULL)",
+            name="ck_ats_forward_test_campaign_binding",
+        ),
         Index(
             "ix_ats_forward_test_as_of",
             "as_of",
             "status",
         ),
+        Index(
+            "ix_ats_forward_test_campaign_as_of",
+            "campaign_id",
+            "as_of",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     proposal_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    campaign_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ats_forward_test_campaigns.id"),
+        nullable=True,
+    )
+    campaign_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
     run_type: Mapped[str] = mapped_column(String(16), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
