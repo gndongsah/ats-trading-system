@@ -28,9 +28,13 @@ from src.forward_test import (
     ForwardTestRunStatus,
     playbook_digest,
 )
+from src.forward_test_campaign import build_forward_test_campaign
 from src.market_data import Bar, MarketEvent, Observation
 from src.operational_guards import OperationalGuard, OperationalGuardPolicy
-from src.persistence.forward_test_repository import ForwardTestRunRepository
+from src.persistence.forward_test_repository import (
+    ForwardTestCampaignRepository,
+    ForwardTestRunRepository,
+)
 from src.playbook import PLAYBOOK
 from src.portfolio import RiskDecision
 from src.proposals import (
@@ -42,6 +46,17 @@ from src.proposals import (
 )
 
 AT = datetime(2026, 10, 27, 15, 0, tzinfo=UTC)
+CAMPAIGN_START = AT - timedelta(days=1)
+
+
+def campaign():
+    return build_forward_test_campaign(
+        created_at=CAMPAIGN_START - timedelta(minutes=5),
+        start_at=CAMPAIGN_START,
+        end_at=CAMPAIGN_START + timedelta(weeks=8),
+        setup_scope=("breakout",),
+        operational_policy_version="ops-v1",
+    )
 
 
 class RiskChecker:
@@ -193,6 +208,7 @@ def orchestrator(candidate, *, max_age=timedelta(minutes=2), playbook=None):
         ),
         journal_service=PaperFillJournalService(journal_repo),
         run_repository=run_repo,
+        campaign=campaign(),
         playbook=playbook or PLAYBOOK,
     )
     return service, risk, journal_repo, run_repo
@@ -222,6 +238,8 @@ def test_forward_test_run_executes_paper_and_persists_trace_evidence():
 
     assert result.evidence.status is ForwardTestRunStatus.FILLED
     assert result.evidence.run_type.value == "PAPER"
+    assert result.evidence.campaign_id == service._campaign.campaign_id
+    assert result.evidence.campaign_digest == service._campaign_digest
     assert result.evidence.playbook_version == PLAYBOOK.version
     assert result.evidence.playbook_digest == playbook_digest(PLAYBOOK)
     assert result.evidence.market_source == "forward-fixture"
@@ -326,6 +344,8 @@ def test_forward_test_repository_round_trip_is_idempotent():
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     with Session(engine) as session:
+        campaign_repository = ForwardTestCampaignRepository(session)
+        campaign_repository.save(service._campaign)
         repository = ForwardTestRunRepository(session)
         repository.save(evidence)
         repository.save(evidence)
@@ -336,7 +356,60 @@ def test_forward_test_repository_round_trip_is_idempotent():
             start=AT - timedelta(minutes=1),
             end=AT + timedelta(minutes=1),
         )
+        by_campaign = repository.list_by_campaign(service._campaign.campaign_id)
 
     assert restored == evidence
     assert listed == (evidence,)
+    assert by_campaign == (evidence,)
     assert result.evidence == evidence
+
+
+def test_campaign_operational_policy_drift_blocks_before_risk_or_broker():
+    candidate = proposal()
+    risk = RiskChecker(fresh_risk(candidate))
+    journal_repo = JournalRepository()
+    run_repo = RunRepository()
+    service = ForwardTestOrchestrator(
+        execution_gate=ProposalExecutionGate(
+            risk_checker=risk,
+            execution_service=ExecutionService(PaperBrokerAdapter()),
+            operational_guard=OperationalGuard(
+                policy=OperationalGuardPolicy(
+                    version="ops-v2",
+                    max_order_quantity=Decimal(100),
+                    max_order_notional=Decimal(20_000),
+                    max_orders_per_day=10,
+                    max_market_data_age=timedelta(minutes=2),
+                )
+            ),
+        ),
+        journal_service=PaperFillJournalService(journal_repo),
+        run_repository=run_repo,
+        campaign=campaign(),
+    )
+
+    result = service.run(request(candidate))
+
+    assert result.evidence.status is ForwardTestRunStatus.BLOCKED
+    assert "operational policy drift" in result.evidence.blocked_reason
+    assert risk.calls == 0
+    assert journal_repo.saved == []
+    assert run_repo.saved == [result.evidence]
+
+
+def test_campaign_scope_blocks_unapproved_setup_before_risk_or_broker():
+    candidate = proposal()
+    candidate = candidate.model_copy(
+        update={
+            "plan": candidate.plan.model_copy(update={"setup_type": SetupType.PULLBACK})
+        }
+    )
+    service, risk, journal_repo, run_repo = orchestrator(candidate)
+
+    result = service.run(request(candidate))
+
+    assert result.evidence.status is ForwardTestRunStatus.BLOCKED
+    assert "outside campaign scope" in result.evidence.blocked_reason
+    assert risk.calls == 0
+    assert journal_repo.saved == []
+    assert run_repo.saved == [result.evidence]
