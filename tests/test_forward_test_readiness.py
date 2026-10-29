@@ -3,7 +3,10 @@ from decimal import Decimal
 
 import pytest
 
-from src.forward_test_campaign import build_forward_test_campaign, campaign_manifest_digest
+from src.forward_test_campaign import (
+    build_forward_test_campaign,
+    campaign_manifest_digest,
+)
 from src.forward_test_readiness import (
     ForwardTestGateDecision,
     ForwardTestGateReason,
@@ -45,7 +48,7 @@ def performance(
         expectancy_after_costs_r=(
             Decimal(cumulative_r) / Decimal(trades) if trades else None
         ),
-        max_drawdown_r=Decimal("2"),
+        max_drawdown_r=Decimal(2),
         average_mae_r=Decimal("0.5"),
         average_mfe_r=Decimal("1.5"),
         adherence_observations=observations,
@@ -85,7 +88,7 @@ def report(
         closed_trades=sum(item.closed_trades for item in slices),
         cumulative_r=sum((item.cumulative_r for item in slices), Decimal(0)),
         expectancy_after_costs_r=Decimal("0.2"),
-        max_drawdown_r=Decimal("3"),
+        max_drawdown_r=Decimal(3),
         average_mae_r=Decimal("0.5"),
         average_mfe_r=Decimal("1.5"),
         adherence_observations=sum(item.adherence_observations for item in slices),
