@@ -1,10 +1,8 @@
 """ATS-031 deterministic real-time PAPER forward-test orchestration."""
 
-import json
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-from hashlib import sha256
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -12,6 +10,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from src.domain.models import JournalEntry, _require_utc
 from src.execution import BrokerSubmissionReceipt, SubmissionStatus
 from src.feedback import PaperFillJournalService
+from src.forward_test_campaign import (
+    ForwardTestCampaignManifest,
+    campaign_manifest_digest,
+    playbook_digest,
+    validate_campaign_preflight,
+)
 from src.market_data import Bar, Observation
 from src.playbook import PLAYBOOK, PlaybookConfig
 from src.proposals import (
@@ -22,14 +26,6 @@ from src.proposals import (
 )
 from src.run_type import RunType
 
-
-def playbook_digest(playbook: PlaybookConfig) -> str:
-    payload = json.dumps(
-        playbook.model_dump(mode="json"),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return sha256(payload.encode("utf-8")).hexdigest()
 
 
 class ForwardTestRunStatus(StrEnum):
@@ -92,6 +88,8 @@ class ForwardTestRunEvidence(BaseModel):
     proposal_fingerprint: str
     approval_decision: str
     approver_identity: str
+    campaign_id: UUID | None = None
+    campaign_digest: str | None = Field(default=None, min_length=64, max_length=64)
     playbook_version: str
     playbook_digest: str = Field(min_length=64, max_length=64)
     market_source: str
@@ -141,11 +139,16 @@ class ForwardTestOrchestrator:
         execution_gate: ProposalExecutionGate,
         journal_service: PaperFillJournalService,
         run_repository: ForwardTestRunRepositoryProtocol,
+        campaign: ForwardTestCampaignManifest,
+        operational_policy_version: str,
         playbook: PlaybookConfig = PLAYBOOK,
     ) -> None:
         self._execution_gate = execution_gate
         self._journal_service = journal_service
         self._run_repository = run_repository
+        self._campaign = campaign
+        self._campaign_digest = campaign_manifest_digest(campaign)
+        self._operational_policy_version = operational_policy_version
         self._playbook = playbook
         self._frozen_playbook_version = playbook.version
         self._frozen_playbook_digest = playbook_digest(playbook)
@@ -159,6 +162,8 @@ class ForwardTestOrchestrator:
             "proposal_fingerprint": request.proposal.fingerprint,
             "approval_decision": request.human_approval.decision.value,
             "approver_identity": request.human_approval.approver_identity,
+            "campaign_id": self._campaign.campaign_id,
+            "campaign_digest": self._campaign_digest,
             "playbook_version": self._frozen_playbook_version,
             "playbook_digest": self._frozen_playbook_digest,
             "market_source": request.market_observation.event.source,
@@ -168,6 +173,26 @@ class ForwardTestOrchestrator:
             "market_available_at": request.market_observation.event.available_at,
             "market_ingested_at": request.market_observation.ingested_at,
         }
+
+        try:
+            validate_campaign_preflight(
+                self._campaign,
+                playbook=self._playbook,
+                operational_policy_version=self._operational_policy_version,
+                as_of=request.as_of,
+                setup=request.proposal.plan.setup_type.value,
+            )
+        except PermissionError as exc:
+            evidence = ForwardTestRunEvidence(
+                **common,
+                status=ForwardTestRunStatus.BLOCKED,
+                blocked_reason=f"CAMPAIGN_PREFLIGHT:{exc}",
+            )
+            self._run_repository.save(evidence)
+            return ForwardTestRunResult(
+                evidence=evidence,
+                journal_entry=request.journal_entry,
+            )
 
         if (
             self._playbook.version != self._frozen_playbook_version
