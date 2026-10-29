@@ -154,6 +154,10 @@ class ProposalExecutionGate:
         self._operational_guard = operational_guard
         self._autonomy_policy = autonomy_policy
 
+    @property
+    def operational_policy_version(self) -> str:
+        return self._operational_guard.policy_version
+
     def execute(
         self,
         *,
