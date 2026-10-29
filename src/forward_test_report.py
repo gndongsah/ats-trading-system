@@ -1,7 +1,7 @@
 """ATS-034 reproducible PAPER forward-test weekly and campaign reporting."""
 
 from collections import defaultdict
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from hashlib import sha256
@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.domain.models import JournalEntry
 from src.forward_test import ForwardTestRunEvidence, ForwardTestRunStatus
 from src.forward_test_campaign import ForwardTestCampaignManifest, campaign_manifest_digest
-from src.forward_test_scorecard import DenialCategory, ForwardTestDailyScorecard
+from src.forward_test_scorecard import ForwardTestDailyScorecard
 from src.run_type import RunType
 
 ZERO = Decimal(0)
