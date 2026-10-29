@@ -48,9 +48,7 @@ class ForwardTestCampaignManifest(BaseModel):
 
     @field_validator("setup_scope")
     @classmethod
-    def setup_scope_is_nonempty_unique(
-        cls, value: tuple[str, ...]
-    ) -> tuple[str, ...]:
+    def setup_scope_is_nonempty_unique(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         normalized = tuple(item.strip().casefold() for item in value)
         if not normalized:
             raise ValueError("forward-test campaign requires at least one setup")
@@ -70,7 +68,7 @@ class ForwardTestCampaignManifest(BaseModel):
         if duration < MIN_CAMPAIGN_DURATION or duration > MAX_CAMPAIGN_DURATION:
             raise ValueError("campaign duration must be between 8 and 12 weeks")
         if self.created_at > self.start_at:
-            raise ValueError("campaign manifest must be created no later than campaign start")
+            raise ValueError(\n                "campaign manifest must be created no later than campaign start"\n            )
         return self
 
 
