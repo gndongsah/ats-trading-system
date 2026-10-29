@@ -16,7 +16,10 @@ from src.domain.models import (
     TradingStyle,
 )
 from src.forward_test import ForwardTestRunEvidence, ForwardTestRunStatus
-from src.forward_test_campaign import build_forward_test_campaign, campaign_manifest_digest
+from src.forward_test_campaign import (
+    build_forward_test_campaign,
+    campaign_manifest_digest,
+)
 from src.forward_test_report import (
     ForwardTestReportKind,
     build_campaign_forward_test_report,
@@ -178,14 +181,14 @@ def test_weekly_report_aggregates_flow_performance_and_slices():
 
 
 def test_report_digest_is_reproducible():
-    kwargs = dict(
-        campaign=CAMPAIGN,
-        week_start=DAY,
-        as_of=START + timedelta(days=6),
-        scorecards=(scorecard(DAY),),
-        run_evidence=(run(),),
-        journals=(journal("1.0"),),
-    )
+    kwargs = {
+        "campaign": CAMPAIGN,
+        "week_start": DAY,
+        "as_of": START + timedelta(days=6),
+        "scorecards": (scorecard(DAY),),
+        "run_evidence": (run(),),
+        "journals": (journal("1.0"),),
+    }
 
     first = build_weekly_forward_test_report(**kwargs)
     second = build_weekly_forward_test_report(**kwargs)
