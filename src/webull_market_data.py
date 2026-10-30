@@ -283,6 +283,8 @@ def main() -> int:
     except Exception as error:  # noqa: BLE001
         print("market_data_probe: FAIL")
         print(f"error_type: {type(error).__name__}")
+        if isinstance(error, MalformedResponse):
+            print(f"validation_reason: {error}")
         return 1
 
     print("market_data_probe: PASS")
