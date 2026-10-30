@@ -171,21 +171,15 @@ def _snapshot_rows(body: object) -> list[dict[str, Any]]:
     return body
 
 
-def _bar_container(body: object, symbol: str) -> dict[str, Any]:
+def _bar_rows(body: object, symbol: str) -> list[dict[str, Any]]:
     if isinstance(body, dict) and set(body) == {"data"}:
         body = body["data"]
-    if isinstance(body, list):
-        matches = [
-            row
-            for row in body
-            if isinstance(row, dict) and row.get("symbol") == symbol
-        ]
-        if len(matches) != 1:
-            raise MalformedResponse("bar response must contain exactly one symbol")
-        return matches[0]
-    if isinstance(body, dict) and body.get("symbol") in (None, symbol):
-        return body
-    raise MalformedResponse("bar response has an unexpected response shape")
+    if not isinstance(body, list) or not all(isinstance(row, dict) for row in body):
+        raise MalformedResponse("bar response has an unexpected response shape")
+    matches = [row for row in body if row.get("symbol") == symbol]
+    if len(matches) != 1:
+        raise MalformedResponse("bar response must contain exactly one requested bar")
+    return matches
 
 
 class WebullMarketDataAdapter:
@@ -237,7 +231,7 @@ class WebullMarketDataAdapter:
                 category=category,
                 timespan="M1",
                 count="1",
-                real_time_required=False,
+                real_time_required=True,
                 trading_sessions="RTH",
             )
         except Exception as error:  # noqa: BLE001
@@ -245,12 +239,7 @@ class WebullMarketDataAdapter:
                 raise
             raise classify_sdk_exception("stock completed 1m bar", error) from None
 
-        container = _bar_container(
-            _response_json(response, "stock completed 1m bar"), symbol
-        )
-        bars = container.get("result")
-        if not isinstance(bars, list) or len(bars) != 1 or not isinstance(bars[0], dict):
-            raise MalformedResponse("bar response must contain exactly one completed bar")
+        bars = _bar_rows(_response_json(response, "stock completed 1m bar"), symbol)
         row = bars[0]
         provider_time = _timestamp(row.get("time"), "bar.time")
         available_at = observed_at.astimezone(UTC)
