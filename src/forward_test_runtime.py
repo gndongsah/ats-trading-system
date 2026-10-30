@@ -12,6 +12,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Callable
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from src.domain.models import JournalEntry
+from src.forward_test import (
+    ForwardTestOrchestrator,
+    ForwardTestRunInput,
+    ForwardTestRunResult,
+)
+from src.proposals import HumanApproval, TradeProposal
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.market_data import MarketDataStore, Observation
@@ -118,3 +126,55 @@ class DurableWebullPaperMarketRuntime:
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("runtime clock must be timezone-aware")
         return value.astimezone(UTC)
+
+
+class PreparedForwardTestRun(BaseModel):
+    """Forward-test request before current market evidence is attached."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    proposal: TradeProposal
+    human_approval: HumanApproval
+    orders_submitted_today: int = Field(ge=0, strict=True)
+    idempotency_key: str = Field(min_length=1, max_length=120)
+    journal_entry: JournalEntry
+    expected_journal_revision: int | None = Field(default=None, ge=0)
+
+
+class DurableForwardTestPaperRuntime:
+    """Attach durable fresh market evidence, then invoke ATS-031 PAPER flow."""
+
+    def __init__(
+        self,
+        *,
+        market_runtime: DurableWebullPaperMarketRuntime,
+        orchestrator: ForwardTestOrchestrator,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
+        self._market_runtime = market_runtime
+        self._orchestrator = orchestrator
+        self._clock = clock
+
+    def run(
+        self,
+        request: PreparedForwardTestRun,
+        *,
+        category: str,
+    ) -> ForwardTestRunResult:
+        as_of = DurableWebullPaperMarketRuntime._utc(self._clock())
+        observation = self._market_runtime.collect(
+            symbol=request.proposal.plan.security.ticker,
+            category=category,
+            as_of=as_of,
+        )
+        hydrated = ForwardTestRunInput(
+            proposal=request.proposal,
+            human_approval=request.human_approval,
+            market_observation=observation,
+            as_of=as_of,
+            orders_submitted_today=request.orders_submitted_today,
+            idempotency_key=request.idempotency_key,
+            journal_entry=request.journal_entry,
+            expected_journal_revision=request.expected_journal_revision,
+        )
+        return self._orchestrator.run(hydrated)
