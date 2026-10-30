@@ -171,11 +171,23 @@ def _snapshot_rows(body: object) -> list[dict[str, Any]]:
     return body
 
 
+def _shape(value: object) -> str:
+    if isinstance(value, dict):
+        keys = ",".join(sorted(str(key) for key in value.keys()))
+        return f"dict(keys=[{keys}])"
+    if isinstance(value, list):
+        item_type = type(value[0]).__name__ if value else "empty"
+        return f"list(len={len(value)},first={item_type})"
+    return type(value).__name__
+
+
 def _bar_rows(body: object, symbol: str) -> list[dict[str, Any]]:
     if isinstance(body, dict) and set(body) == {"data"}:
         body = body["data"]
     if not isinstance(body, list) or not all(isinstance(row, dict) for row in body):
-        raise MalformedResponse("bar response has an unexpected response shape")
+        raise MalformedResponse(
+        "bar response has an unexpected response shape: " + _shape(body)
+    )
     matches = [row for row in body if row.get("symbol") == symbol]
     if len(matches) != 1:
         raise MalformedResponse("bar response must contain exactly one requested bar")
