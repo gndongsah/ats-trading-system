@@ -30,20 +30,18 @@ class Gateway:
                 "last_trade_time": 1793287800000,
             }
         ]
-        self.bars = bars or {
-            "symbol": "SPY",
-            "result": [
-                {
-                    "time": "2026-10-29T15:30:00+00:00",
-                    "open": "687.90",
-                    "high": "688.30",
-                    "low": "687.80",
-                    "close": "688.12",
-                    "volume": "125000",
-                    "trading_sessions": "RTH",
-                }
-            ],
-        }
+        self.bars = bars or [
+            {
+                "symbol": "SPY",
+                "time": "2026-10-29T15:30:00+00:00",
+                "open": "687.90",
+                "high": "688.30",
+                "low": "687.80",
+                "close": "688.12",
+                "volume": "125000",
+                "trading_session": "RTH",
+            }
+        ]
         self.calls = []
 
     def get_snapshot(self, **kwargs):
@@ -75,7 +73,7 @@ def test_probe_fetches_snapshot_and_completed_rth_bar():
             "category": "US_ETF",
             "timespan": "M1",
             "count": "1",
-            "real_time_required": False,
+            "real_time_required": True,
             "trading_sessions": "RTH",
         },
     )
@@ -104,19 +102,17 @@ def test_bar_can_be_persisted_and_replayed(sqlite_session):
 
 def test_future_provider_timestamp_is_rejected():
     gateway = Gateway(
-        bars={
-            "symbol": "SPY",
-            "result": [
-                {
-                    "time": "2026-10-29T15:32:00+00:00",
-                    "open": "1",
-                    "high": "1",
-                    "low": "1",
-                    "close": "1",
-                    "volume": "1",
-                }
-            ],
-        }
+        bars=[
+            {
+                "symbol": "SPY",
+                "time": "2026-10-29T15:32:00+00:00",
+                "open": "1",
+                "high": "1",
+                "low": "1",
+                "close": "1",
+                "volume": "1",
+            }
+        ]
     )
     with pytest.raises(MalformedResponse, match="collector future"):
         WebullMarketDataAdapter(gateway, clock=lambda: AT).fetch_completed_1m_bar(
@@ -144,7 +140,8 @@ def test_malformed_bar_values_fail_closed(field, value):
         "volume": "100",
     }
     row[field] = value
-    gateway = Gateway(bars={"symbol": "SPY", "result": [row]})
+    row["symbol"] = "SPY"
+    gateway = Gateway(bars=[row])
     with pytest.raises((MalformedResponse, ValueError)):
         WebullMarketDataAdapter(gateway, clock=lambda: AT).fetch_completed_1m_bar(
             "SPY", category="US_ETF"
