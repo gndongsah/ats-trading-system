@@ -7,9 +7,11 @@ from sqlalchemy.orm import sessionmaker
 
 from src.database import Base
 from src.forward_test_runtime import (
+    DurableForwardTestPaperRuntime,
     DurableWebullPaperMarketRuntime,
     MarketFreshnessPolicy,
     MarketFreshnessViolation,
+    PreparedForwardTestRun,
 )
 from src.market_data import Bar, MarketDataStore, MarketEvent, ReplayRequirement
 from src.persistence.models import MarketDataRecord
@@ -146,3 +148,56 @@ def test_future_event_and_future_availability_fail_closed(runtime):
         )
         with pytest.raises(MarketFreshnessViolation, match=message):
             runner.collect(symbol="SPY", category="US_ETF", as_of=AT)
+
+
+
+def test_forward_runtime_attaches_durable_market_observation_before_orchestration():
+    from src.domain.models import JournalEntry
+    from tests.test_forward_test import approval, observation, proposal
+
+    candidate = proposal()
+    persisted = observation(candidate, minutes_old=1)
+
+    class MarketRuntime:
+        def __init__(self):
+            self.calls = []
+
+        def collect(self, *, symbol, category, as_of):
+            self.calls.append((symbol, category, as_of))
+            return persisted
+
+    class Orchestrator:
+        def __init__(self):
+            self.requests = []
+
+        def run(self, request):
+            self.requests.append(request)
+            return request
+
+    market_runtime = MarketRuntime()
+    orchestrator = Orchestrator()
+    service = DurableForwardTestPaperRuntime(
+        market_runtime=market_runtime,
+        orchestrator=orchestrator,
+        clock=lambda: AT,
+    )
+    prepared = PreparedForwardTestRun(
+        proposal=candidate,
+        human_approval=approval(candidate),
+        orders_submitted_today=0,
+        idempotency_key="ats-036b-runtime",
+        journal_entry=JournalEntry(
+            plan=candidate.plan,
+            created_at=candidate.created_at,
+        ),
+        expected_journal_revision=0,
+    )
+
+    hydrated = service.run(prepared, category="US_STOCK")
+
+    assert market_runtime.calls == [
+        (candidate.plan.security.ticker, "US_STOCK", AT)
+    ]
+    assert hydrated.market_observation == persisted
+    assert hydrated.as_of == AT
+    assert orchestrator.requests == [hydrated]
