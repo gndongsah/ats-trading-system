@@ -11,7 +11,8 @@ from src.forward_test_runtime import (
     MarketFreshnessPolicy,
     MarketFreshnessViolation,
 )
-from src.market_data import Bar, MarketEvent, ReplayRequirement, MarketDataStore
+from src.market_data import Bar, MarketDataStore, MarketEvent, ReplayRequirement
+from src.persistence.models import MarketDataRecord
 
 AT = datetime(2026, 10, 30, 14, 31, tzinfo=UTC)
 
@@ -99,12 +100,7 @@ def test_prior_session_or_old_bar_is_rejected_before_persistence(runtime):
         runner.collect(symbol="SPY", category="US_ETF", as_of=AT)
 
     with runtime() as session:
-        assert (
-            MarketDataStore(session)
-            .session.query(__import__("src.persistence.models", fromlist=["MarketDataRecord"]).MarketDataRecord)
-            .count()
-            == 0
-        )
+        assert session.query(MarketDataRecord).count() == 0
 
 
 def test_delayed_collection_is_rejected(runtime):
