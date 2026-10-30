@@ -157,7 +157,10 @@ def _timestamp(value: object, field: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
-        raise MalformedResponse(f"{field} timestamp is malformed") from None
+        try:
+            parsed = datetime.strptime(text, "%Y-%m-%dT%H:%M:%S.%f%z")
+        except ValueError:
+            raise MalformedResponse(f"{field} timestamp is malformed") from None
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise MalformedResponse(f"{field} timestamp must include timezone")
     return parsed.astimezone(UTC)
