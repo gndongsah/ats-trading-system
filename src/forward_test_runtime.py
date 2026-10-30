@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.market_data import MarketDataStore, Observation
+from src.persistence.models import MarketDataRecord
 from src.webull_market_data import WebullMarketDataAdapter
 
 
@@ -70,7 +71,7 @@ class DurableWebullPaperMarketRuntime:
         # observation survived the commit boundary rather than only the ORM map.
         with self._session_factory() as session:
             row = session.get(
-                __import__("src.persistence.models", fromlist=["MarketDataRecord"]).MarketDataRecord,
+                MarketDataRecord,
                 (
                     event.source,
                     event.symbol,
