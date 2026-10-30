@@ -152,7 +152,9 @@ def _timestamp(value: object, field: str) -> datetime:
         except (OverflowError, OSError, ValueError):
             raise MalformedResponse(f"{field} timestamp is malformed") from None
     if not isinstance(value, str) or not value.strip():
-        raise MalformedResponse(f"{field} timestamp is malformed")
+        raise MalformedResponse(
+            f"{field} timestamp is malformed: type={type(value).__name__} value={value!r}"
+        )
     text = value.strip()
     if text.isascii() and text.isdigit():
         raw = float(text)
