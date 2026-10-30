@@ -11,10 +11,11 @@ become replay-visible before collection.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 from src.market_data import Bar, MarketEvent
 from src.webull_sandbox_credentials import load_sandbox_credentials
@@ -104,7 +105,9 @@ def build_official_sandbox_market_data_gateway(
     try:
         client = DataClient(api_client)
     except Exception as error:  # noqa: BLE001 - SDK text may include request details.
-        raise classify_sdk_exception("market-data client initialization", error) from None
+        raise classify_sdk_exception(
+            "market-data client initialization", error
+        ) from None
     return OfficialSdkMarketDataGateway(client.market_data)
 
 
@@ -153,7 +156,7 @@ def _timestamp(value: object, field: str) -> datetime:
             raise MalformedResponse(f"{field} timestamp is malformed") from None
     if not isinstance(value, str) or not value.strip():
         raise MalformedResponse(
-            f"{field} timestamp is malformed: type={type(value).__name__} value={value!r}"
+            f"{field} timestamp is malformed: type={type(value).__name__}"
         )
     text = value.strip()
     if text.isascii() and text.isdigit():
@@ -166,13 +169,13 @@ def _timestamp(value: object, field: str) -> datetime:
                 f"{field} timestamp is malformed: numeric-string len={len(text)}"
             ) from None
     try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(text)
     except ValueError:
         try:
             parsed = datetime.strptime(text, "%Y-%m-%dT%H:%M:%S.%f%z")
         except ValueError:
             raise MalformedResponse(
-                f"{field} timestamp is malformed: string len={len(text)} value={text!r}"
+                f"{field} timestamp is malformed: string len={len(text)}"
             ) from None
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise MalformedResponse(f"{field} timestamp must include timezone")
@@ -187,29 +190,27 @@ def _snapshot_rows(body: object) -> list[dict[str, Any]]:
     return body
 
 
-def _shape(value: object) -> str:
-    if isinstance(value, dict):
-        keys = ",".join(sorted(str(key) for key in value.keys()))
-        return f"dict(keys=[{keys}])"
-    if isinstance(value, list):
-        item_type = type(value[0]).__name__ if value else "empty"
-        return f"list(len={len(value)},first={item_type})"
-    return type(value).__name__
-
-
 def _bar_rows(body: object, symbol: str) -> list[dict[str, Any]]:
-    if isinstance(body, dict) and set(body) == {"data"}:
-        body = body["data"]
-    elif isinstance(body, dict) and set(body) == {"result"}:
-        body = body["result"]
-    if not isinstance(body, list) or not all(isinstance(row, dict) for row in body):
-        raise MalformedResponse(
-        "bar response has an unexpected response shape: " + _shape(body)
-    )
-    matches = [row for row in body if row.get("symbol") == symbol]
+    # SDK 3.0.4 get_history_bar delegates to the batch endpoint. Its result
+    # contains instrument envelopes, each with its own result array of bars.
+    if not isinstance(body, dict) or not isinstance(body.get("result"), list):
+        raise MalformedResponse("bar response must contain a result array")
+    instruments = body["result"]
+    if not all(isinstance(row, dict) for row in instruments):
+        raise MalformedResponse("bar result must contain instrument objects")
+    matches = [row for row in instruments if row.get("symbol") == symbol]
     if len(matches) != 1:
-        raise MalformedResponse("bar response must contain exactly one requested bar")
-    return matches
+        raise MalformedResponse(
+            "bar response must contain exactly one requested symbol"
+        )
+    bars = matches[0].get("result")
+    if not isinstance(bars, list) or len(bars) != 1 or not isinstance(bars[0], dict):
+        raise MalformedResponse(
+            "instrument result must contain exactly one requested bar"
+        )
+    if bars[0].get("trading_session") != "RTH":
+        raise MalformedResponse("bar trading_session must be RTH")
+    return bars
 
 
 class WebullMarketDataAdapter:
@@ -224,20 +225,26 @@ class WebullMarketDataAdapter:
         self._clock = clock
         self._source = source
 
-    def fetch_snapshot(self, symbol: str, *, category: str) -> SnapshotEvidence:
+    def _observation_time(self) -> datetime:
         observed_at = self._clock()
         if observed_at.tzinfo is None or observed_at.utcoffset() is None:
             raise ConfigurationError("clock must return timezone-aware datetimes")
+        return observed_at.astimezone(UTC)
+
+    def fetch_snapshot(self, symbol: str, *, category: str) -> SnapshotEvidence:
         try:
             response = self._gateway.get_snapshot(symbols=[symbol], category=category)
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:
             if isinstance(error, (HttpFailure, MalformedResponse)):
                 raise
             raise classify_sdk_exception("stock snapshot", error) from None
         rows = _snapshot_rows(_response_json(response, "stock snapshot"))
+        observed_at = self._observation_time()
         matches = [row for row in rows if row.get("symbol") == symbol]
         if len(matches) != 1:
-            raise MalformedResponse("snapshot must contain exactly one requested symbol")
+            raise MalformedResponse(
+                "snapshot must contain exactly one requested symbol"
+            )
         row = matches[0]
         trade_time = row.get("last_trade_time")
         return SnapshotEvidence(
@@ -252,9 +259,6 @@ class WebullMarketDataAdapter:
         )
 
     def fetch_completed_1m_bar(self, symbol: str, *, category: str) -> MarketEvent:
-        observed_at = self._clock()
-        if observed_at.tzinfo is None or observed_at.utcoffset() is None:
-            raise ConfigurationError("clock must return timezone-aware datetimes")
         try:
             response = self._gateway.get_history_bar(
                 symbol=symbol,
@@ -264,17 +268,22 @@ class WebullMarketDataAdapter:
                 real_time_required=True,
                 trading_sessions="RTH",
             )
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:
             if isinstance(error, (HttpFailure, MalformedResponse)):
                 raise
             raise classify_sdk_exception("stock completed 1m bar", error) from None
 
         bars = _bar_rows(_response_json(response, "stock completed 1m bar"), symbol)
+        observed_at = self._observation_time()
         row = bars[0]
         provider_time = _timestamp(row.get("time"), "bar.time")
         available_at = observed_at.astimezone(UTC)
         if provider_time > available_at:
             raise MalformedResponse("bar timestamp cannot be in the collector future")
+        # Preserve provider time; conservatively allow the entire minute to
+        # elapse even if the provider labels bars by their start time.
+        if provider_time + timedelta(minutes=1) > available_at:
+            raise MalformedResponse("bar interval may still be incomplete")
         return MarketEvent(
             source=self._source,
             symbol=symbol,
@@ -307,8 +316,8 @@ def build_keyring_sandbox_adapter() -> WebullMarketDataAdapter:
 
 
 def main() -> int:
-    adapter = build_keyring_sandbox_adapter()
     try:
+        adapter = build_keyring_sandbox_adapter()
         result = adapter.probe("SPY", category="US_ETF")
     except Exception as error:  # noqa: BLE001
         print("market_data_probe: FAIL")

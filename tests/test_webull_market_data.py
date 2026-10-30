@@ -1,13 +1,12 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 
-from src.market_data import MarketDataStore, ReplayRequirement
+from src.market_data import MarketDataStore, ReplayRequirement, ReplayUnavailable
 from src.persistence.models import MarketDataRecord
 from src.webull_market_data import WebullMarketDataAdapter
 from src.webull_sandbox_readonly import MalformedResponse
-
 
 AT = datetime(2026, 10, 29, 15, 31, tzinfo=UTC)
 
@@ -33,7 +32,7 @@ class Gateway:
         self.bars = bars or [
             {
                 "symbol": "SPY",
-                "time": "2026-10-29T15:30:00+00:00",
+                "time": "2026-10-29T15:30:00.000+0000",
                 "open": "687.90",
                 "high": "688.30",
                 "low": "687.80",
@@ -50,7 +49,7 @@ class Gateway:
 
     def get_history_bar(self, **kwargs):
         self.calls.append(("bar", kwargs))
-        return Response(self.bars)
+        return Response({"result": [{"symbol": "SPY", "result": self.bars}]})
 
 
 def test_probe_fetches_snapshot_and_completed_rth_bar():
@@ -111,6 +110,7 @@ def test_future_provider_timestamp_is_rejected():
                 "low": "1",
                 "close": "1",
                 "volume": "1",
+                "trading_session": "RTH",
             }
         ]
     )
@@ -132,12 +132,13 @@ def test_future_provider_timestamp_is_rejected():
 )
 def test_malformed_bar_values_fail_closed(field, value):
     row = {
-        "time": "2026-10-29T15:30:00+00:00",
+        "time": "2026-10-29T15:30:00.000+0000",
         "open": "10",
         "high": "11",
         "low": "9",
         "close": "10.5",
         "volume": "100",
+        "trading_session": "RTH",
     }
     row[field] = value
     row["symbol"] = "SPY"
@@ -169,3 +170,89 @@ def sqlite_session():
     finally:
         session.close()
         engine.dispose()
+
+
+@pytest.mark.parametrize("session", [None, "PRE", "ATH", ""])
+def test_bar_requires_requested_session(session):
+    gateway = Gateway()
+    gateway.bars[0]["trading_session"] = session
+    with pytest.raises(MalformedResponse, match="trading_session"):
+        WebullMarketDataAdapter(gateway, clock=lambda: AT).fetch_completed_1m_bar(
+            "SPY", category="US_ETF"
+        )
+
+
+def test_observation_clock_is_sampled_after_response():
+    gateway = Gateway()
+
+    def clock():
+        assert gateway.calls
+        return AT
+
+    result = WebullMarketDataAdapter(gateway, clock=clock).probe(
+        "SPY", category="US_ETF"
+    )
+    assert result.snapshot.observed_at == AT
+    assert result.event.available_at == AT
+
+
+def test_incomplete_minute_is_rejected():
+    gateway = Gateway()
+    gateway.bars[0]["time"] = "2026-10-29T15:30:30.000+0000"
+    with pytest.raises(MalformedResponse, match="incomplete"):
+        WebullMarketDataAdapter(gateway, clock=lambda: AT).fetch_completed_1m_bar(
+            "SPY", category="US_ETF"
+        )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        [],
+        {"data": []},
+        {"result": []},
+        {"result": [None]},
+        {"result": [{"symbol": "AAPL", "result": []}]},
+        {"result": [{"symbol": "SPY", "result": []}]},
+        {"result": [{"symbol": "SPY", "result": [None]}]},
+        {"result": [{"symbol": "SPY", "result": [{}, {}]}]},
+    ],
+)
+def test_malformed_nested_response_is_rejected(body):
+    gateway = Gateway()
+    gateway.get_history_bar = lambda **kwargs: Response(body)
+    with pytest.raises(MalformedResponse):
+        WebullMarketDataAdapter(gateway, clock=lambda: AT).fetch_completed_1m_bar(
+            "SPY", category="US_ETF"
+        )
+
+
+def test_persistence_clock_and_replay_visibility_are_independent(sqlite_session):
+    event = WebullMarketDataAdapter(Gateway(), clock=lambda: AT).fetch_completed_1m_bar(
+        "SPY", category="US_ETF"
+    )
+    persisted_at = AT + timedelta(seconds=2)
+    store = MarketDataStore(sqlite_session, clock=lambda: persisted_at)
+    with sqlite_session.begin():
+        observation = store.ingest(event)
+    assert observation.ingested_at == persisted_at
+    assert observation.event.event_time == AT - timedelta(minutes=1)
+    assert observation.event.available_at == AT
+    requirements = (
+        ReplayRequirement(
+            source=event.source,
+            symbol="SPY",
+            stream="bar:1m",
+            max_age=timedelta(minutes=5),
+        ),
+    )
+    for as_of in (
+        AT - timedelta(seconds=1),
+        AT,
+        persisted_at - timedelta(microseconds=1),
+    ):
+        with pytest.raises(ReplayUnavailable):
+            store.replay(as_of=as_of, requirements=requirements)
+    assert store.replay(as_of=persisted_at, requirements=requirements).observations == (
+        observation,
+    )
