@@ -154,13 +154,24 @@ def _timestamp(value: object, field: str) -> datetime:
     if not isinstance(value, str) or not value.strip():
         raise MalformedResponse(f"{field} timestamp is malformed")
     text = value.strip()
+    if text.isascii() and text.isdigit():
+        raw = float(text)
+        seconds = raw / 1000 if raw >= 10_000_000_000 else raw
+        try:
+            return datetime.fromtimestamp(seconds, tz=UTC)
+        except (OverflowError, OSError, ValueError):
+            raise MalformedResponse(
+                f"{field} timestamp is malformed: numeric-string len={len(text)}"
+            ) from None
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
         try:
             parsed = datetime.strptime(text, "%Y-%m-%dT%H:%M:%S.%f%z")
         except ValueError:
-            raise MalformedResponse(f"{field} timestamp is malformed") from None
+            raise MalformedResponse(
+                f"{field} timestamp is malformed: string len={len(text)} value={text!r}"
+            ) from None
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise MalformedResponse(f"{field} timestamp must include timezone")
     return parsed.astimezone(UTC)
