@@ -184,6 +184,8 @@ def _shape(value: object) -> str:
 def _bar_rows(body: object, symbol: str) -> list[dict[str, Any]]:
     if isinstance(body, dict) and set(body) == {"data"}:
         body = body["data"]
+    elif isinstance(body, dict) and set(body) == {"result"}:
+        body = body["result"]
     if not isinstance(body, list) or not all(isinstance(row, dict) for row in body):
         raise MalformedResponse(
         "bar response has an unexpected response shape: " + _shape(body)
