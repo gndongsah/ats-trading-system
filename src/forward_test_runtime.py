@@ -29,9 +29,7 @@ from src.webull_market_data import WebullMarketDataAdapter
 class MarketFreshnessPolicy(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    max_event_age: timedelta = Field(
-        default=timedelta(minutes=2), gt=timedelta(0)
-    )
+    max_event_age: timedelta = Field(default=timedelta(minutes=2), gt=timedelta(0))
     max_collection_delay: timedelta = Field(
         default=timedelta(seconds=30), ge=timedelta(0)
     )
