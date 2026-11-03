@@ -8,10 +8,11 @@ PAPER adapter.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Callable
 
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.orm import Session, sessionmaker
 
 from src.domain.models import JournalEntry
 from src.forward_test import (
@@ -19,11 +20,9 @@ from src.forward_test import (
     ForwardTestRunInput,
     ForwardTestRunResult,
 )
-from src.proposals import HumanApproval, TradeProposal
-from sqlalchemy.orm import Session, sessionmaker
-
 from src.market_data import MarketDataStore, Observation
 from src.persistence.models import MarketDataRecord
+from src.proposals import HumanApproval, TradeProposal
 from src.webull_market_data import WebullMarketDataAdapter
 
 
@@ -50,12 +49,12 @@ class DurableWebullPaperMarketRuntime:
         *,
         adapter: WebullMarketDataAdapter,
         session_factory: sessionmaker[Session],
-        policy: MarketFreshnessPolicy = MarketFreshnessPolicy(),
+        policy: MarketFreshnessPolicy | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._adapter = adapter
         self._session_factory = session_factory
-        self._policy = policy
+        self._policy = policy or MarketFreshnessPolicy()
         self._clock = clock
 
     def collect(
@@ -65,9 +64,15 @@ class DurableWebullPaperMarketRuntime:
         category: str,
         as_of: datetime | None = None,
     ) -> Observation:
-        evaluated_at = self._utc(as_of or self._clock())
         event = self._adapter.fetch_completed_1m_bar(symbol, category=category)
-        self._validate_freshness(event_time=event.event_time, available_at=event.available_at, evaluated_at=evaluated_at)
+        # Webull sets available_at when the response is observed. Never sample
+        # the decision clock before the provider call completes.
+        evaluated_at = self._utc(as_of or self._clock())
+        self._validate_freshness(
+            event_time=event.event_time,
+            available_at=event.available_at,
+            evaluated_at=evaluated_at,
+        )
 
         with self._session_factory.begin() as session:
             observation = MarketDataStore(
@@ -161,12 +166,14 @@ class DurableForwardTestPaperRuntime:
         *,
         category: str,
     ) -> ForwardTestRunResult:
-        as_of = DurableWebullPaperMarketRuntime._utc(self._clock())
         observation = self._market_runtime.collect(
             symbol=request.proposal.plan.security.ticker,
             category=category,
-            as_of=as_of,
         )
+        # The execution as-of must follow ingestion, not precede a network call.
+        as_of = DurableWebullPaperMarketRuntime._utc(self._clock())
+        if observation.ingested_at > as_of:
+            raise MarketFreshnessViolation("market observation not yet ingested")
         hydrated = ForwardTestRunInput(
             proposal=request.proposal,
             human_approval=request.human_approval,
