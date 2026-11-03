@@ -194,13 +194,10 @@ def test_forward_runtime_attaches_durable_market_observation_before_orchestratio
 
     hydrated = service.run(prepared, category="US_STOCK")
 
-    assert market_runtime.calls == [
-        (candidate.plan.security.ticker, "US_STOCK")
-    ]
+    assert market_runtime.calls == [(candidate.plan.security.ticker, "US_STOCK")]
     assert hydrated.market_observation == persisted
     assert hydrated.as_of == AT
     assert orchestrator.requests == [hydrated]
-
 
 
 def test_collection_clock_is_sampled_after_provider_response(runtime):
