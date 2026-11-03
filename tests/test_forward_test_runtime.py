@@ -150,7 +150,6 @@ def test_future_event_and_future_availability_fail_closed(runtime):
             runner.collect(symbol="SPY", category="US_ETF", as_of=AT)
 
 
-
 def test_forward_runtime_attaches_durable_market_observation_before_orchestration():
     from src.domain.models import JournalEntry
     from tests.test_forward_test import approval, observation, proposal
@@ -162,8 +161,8 @@ def test_forward_runtime_attaches_durable_market_observation_before_orchestratio
         def __init__(self):
             self.calls = []
 
-        def collect(self, *, symbol, category, as_of):
-            self.calls.append((symbol, category, as_of))
+        def collect(self, *, symbol, category):
+            self.calls.append((symbol, category))
             return persisted
 
     class Orchestrator:
@@ -196,8 +195,25 @@ def test_forward_runtime_attaches_durable_market_observation_before_orchestratio
     hydrated = service.run(prepared, category="US_STOCK")
 
     assert market_runtime.calls == [
-        (candidate.plan.security.ticker, "US_STOCK", AT)
+        (candidate.plan.security.ticker, "US_STOCK")
     ]
     assert hydrated.market_observation == persisted
     assert hydrated.as_of == AT
     assert orchestrator.requests == [hydrated]
+
+
+
+def test_collection_clock_is_sampled_after_provider_response(runtime):
+    adapter = Adapter(event())
+
+    def after_response_clock():
+        assert adapter.calls == [("SPY", "US_ETF")]
+        return AT
+
+    runner = DurableWebullPaperMarketRuntime(
+        adapter=adapter,
+        session_factory=runtime,
+        clock=after_response_clock,
+    )
+    observation = runner.collect(symbol="SPY", category="US_ETF")
+    assert observation.ingested_at == AT
