@@ -97,6 +97,8 @@ class ForwardTestRunEvidence(BaseModel):
     market_event_time: datetime
     market_available_at: datetime
     market_ingested_at: datetime
+    journal_id: UUID | None = None
+    trade_id: UUID | None = None
     broker_adapter: str | None = None
     broker_submission_id: UUID | None = None
     journal_revision: int | None = None
@@ -171,6 +173,8 @@ class ForwardTestOrchestrator:
             "market_event_time": request.market_observation.event.event_time,
             "market_available_at": request.market_observation.event.available_at,
             "market_ingested_at": request.market_observation.ingested_at,
+            "journal_id": request.journal_entry.id,
+            "trade_id": request.journal_entry.plan.trade_id,
         }
 
         if (

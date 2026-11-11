@@ -228,6 +228,8 @@ class JournalRepositoryProtocol(Protocol):
 
     def get_by_trade_id(self, trade_id: UUID) -> JournalEntry | None: ...
 
+    def list_latest(self) -> tuple[JournalEntry, ...]: ...
+
 
 class JournalRepository:
     """Append-only persistence for complete ATS-006 journal aggregates.
@@ -375,6 +377,22 @@ class JournalRepository:
             .limit(1)
         )
         return self._decode(record)
+
+    def list_latest(self) -> tuple[JournalEntry, ...]:
+        rows = self._session.scalars(
+            select(JournalEntryRecord).order_by(
+                JournalEntryRecord.id,
+                JournalEntryRecord.revision.desc(),
+            )
+        ).all()
+        latest: dict[UUID, JournalEntryRecord] = {}
+        for row in rows:
+            latest.setdefault(row.id, row)
+        return tuple(
+            entry
+            for entry in (self._decode(row) for row in latest.values())
+            if entry is not None
+        )
 
     @staticmethod
     def _decode(record: JournalEntryRecord | None) -> JournalEntry | None:

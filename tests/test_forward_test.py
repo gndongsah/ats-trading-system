@@ -243,6 +243,8 @@ def test_forward_test_run_executes_paper_and_persists_trace_evidence():
     assert result.evidence.playbook_version == PLAYBOOK.version
     assert result.evidence.playbook_digest == playbook_digest(PLAYBOOK)
     assert result.evidence.market_source == "forward-fixture"
+    assert result.evidence.journal_id == result.journal_entry.id
+    assert result.evidence.trade_id == result.journal_entry.plan.trade_id
     assert result.evidence.market_revision == 1
     assert result.evidence.manual_step_types == ("HUMAN_APPROVAL",)
     assert result.evidence.live_execution_used is False

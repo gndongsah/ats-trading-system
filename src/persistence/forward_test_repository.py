@@ -50,10 +50,24 @@ class ForwardTestCampaignRepository:
         self._session.flush()
         return digest
 
+    def list_all(self) -> tuple[ForwardTestCampaignManifest, ...]:
+        rows = self._session.scalars(
+            select(ForwardTestCampaignRecord).order_by(
+                ForwardTestCampaignRecord.start_at
+            )
+        ).all()
+        return tuple(self._restore_campaign(row) for row in rows)
+
     def get(self, campaign_id: UUID) -> ForwardTestCampaignManifest | None:
         row = self._session.get(ForwardTestCampaignRecord, campaign_id)
         if row is None:
             return None
+        return self._restore_campaign(row)
+
+    @staticmethod
+    def _restore_campaign(
+        row: ForwardTestCampaignRecord,
+    ) -> ForwardTestCampaignManifest:
         data = dict(row.manifest_data)
         data["created_at"] = _as_utc(row.created_at)
         data["start_at"] = _as_utc(row.start_at)
