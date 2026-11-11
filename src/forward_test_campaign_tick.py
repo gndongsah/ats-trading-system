@@ -122,6 +122,14 @@ class CampaignTickRunner:
                 disposition=CampaignTickDisposition.NOOP,
                 reason="CAMPAIGN_ENDED",
             )
+        if activation is None and now.date() != campaign.start_at.date():
+            return self._result(
+                campaign_id=campaign_id,
+                now=now,
+                activated=False,
+                disposition=CampaignTickDisposition.HOLD,
+                reason="DAY1_NOT_ACTIVATED",
+            )
         if not self._scheduler.is_trading_day(now.date()):
             return self._result(
                 campaign_id=campaign_id,
@@ -186,11 +194,12 @@ class CampaignTickRunner:
                     "live_execution_used": False,
                     "proposal_creation_used": False,
                 }
+                completed_at = max(self._utc(self._clock()), observation.ingested_at)
                 self._artifacts.save(
                     kind=CampaignArtifactKind.MARKET_WINDOW,
                     campaign=campaign,
                     key=key,
-                    generated_at=now,
+                    generated_at=completed_at,
                     payload=payload,
                 )
                 executed.append(f"MARKET_WINDOW:{key}")
@@ -199,9 +208,9 @@ class CampaignTickRunner:
                         kind=CampaignArtifactKind.ACTIVATION,
                         campaign=campaign,
                         key=DAY1_ACTIVATION_KEY,
-                        generated_at=now,
+                        generated_at=completed_at,
                         payload={
-                            "activated_at": now.isoformat(),
+                            "activated_at": completed_at.isoformat(),
                             "first_window_scheduled_at": job.scheduled_at.isoformat(),
                             "market_window_key": key,
                             "market_event_time": observation.event.event_time.isoformat(),
