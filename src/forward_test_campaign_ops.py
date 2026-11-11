@@ -97,7 +97,7 @@ class CampaignArtifactRepository:
         path = self._path(envelope.campaign_id, kind, key)
         serialized = envelope.model_dump_json(indent=2)
         if path.exists():
-            existing = CampaignArtifactEnvelope.model_validate_json(path.read_text())
+            existing = self._read(path)
             if existing != envelope:
                 raise PersistenceConflict(
                     f"campaign artifact {kind.value}/{key} already exists"
@@ -119,7 +119,7 @@ class CampaignArtifactRepository:
         path = self._path(campaign_id, kind, key)
         if not path.exists():
             return None
-        return CampaignArtifactEnvelope.model_validate_json(path.read_text())
+        return self._read(path)
 
     def list_kind(
         self,
@@ -130,10 +130,14 @@ class CampaignArtifactRepository:
         directory = self._root / str(campaign_id) / kind.value
         if not directory.exists():
             return ()
-        return tuple(
-            CampaignArtifactEnvelope.model_validate_json(path.read_text())
-            for path in sorted(directory.glob("*.json"))
-        )
+        return tuple(self._read(path) for path in sorted(directory.glob("*.json")))
+
+    @staticmethod
+    def _read(path: Path) -> CampaignArtifactEnvelope:
+        envelope = CampaignArtifactEnvelope.model_validate_json(path.read_text())
+        if _canonical_digest(envelope.payload) != envelope.payload_digest:
+            raise PersistenceConflict("campaign artifact payload digest mismatch")
+        return envelope
 
     def _path(
         self,
