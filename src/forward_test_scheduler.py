@@ -69,6 +69,9 @@ class CampaignScheduler:
             )
         return first
 
+    def is_trading_day(self, trading_day: date) -> bool:
+        return bool(self._calendar.is_session(trading_day))
+
     def jobs_for_day(
         self,
         *,
