@@ -52,7 +52,9 @@ class ForwardTestCampaignRepository:
 
     def list_all(self) -> tuple[ForwardTestCampaignManifest, ...]:
         rows = self._session.scalars(
-            select(ForwardTestCampaignRecord).order_by(ForwardTestCampaignRecord.start_at)
+            select(ForwardTestCampaignRecord).order_by(
+                ForwardTestCampaignRecord.start_at
+            )
         ).all()
         return tuple(self._restore_campaign(row) for row in rows)
 
@@ -63,7 +65,9 @@ class ForwardTestCampaignRepository:
         return self._restore_campaign(row)
 
     @staticmethod
-    def _restore_campaign(row: ForwardTestCampaignRecord) -> ForwardTestCampaignManifest:
+    def _restore_campaign(
+        row: ForwardTestCampaignRecord,
+    ) -> ForwardTestCampaignManifest:
         data = dict(row.manifest_data)
         data["created_at"] = _as_utc(row.created_at)
         data["start_at"] = _as_utc(row.start_at)
