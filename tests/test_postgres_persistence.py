@@ -2967,3 +2967,66 @@ def test_postgres_unified_historical_replay_uses_only_then_known_inputs(
     assert context.market.observations[0].event == event
     assert context.research[0].sources == (persisted_filing,)
     assert context.as_of == as_of
+
+
+def test_postgres_forward_test_runtime_persists_market_event_across_restart(
+    migrated_postgres_engine: Engine,
+):
+    from src.forward_test_runtime import DurableWebullPaperMarketRuntime
+    from src.market_data import Observation
+    from src.persistence.models import MarketDataRecord
+
+    at = datetime(2026, 10, 30, 14, 31, tzinfo=UTC)
+    market_event = MarketEvent(
+        source="webull-openapi-sandbox-v1",
+        symbol="SPY",
+        event_time=at - timedelta(minutes=1),
+        available_at=at,
+        revision=1,
+        payload=Bar(
+            interval="1m",
+            open=Decimal("769.20"),
+            high=Decimal("769.50"),
+            low=Decimal("769.10"),
+            close=Decimal("769.36"),
+            volume=1181369,
+        ),
+    )
+
+    class Adapter:
+        def fetch_completed_1m_bar(self, symbol: str, *, category: str):
+            assert symbol == "SPY"
+            assert category == "US_ETF"
+            return market_event
+
+    factory = sessionmaker(bind=migrated_postgres_engine, expire_on_commit=False)
+    runtime = DurableWebullPaperMarketRuntime(
+        adapter=Adapter(),
+        session_factory=factory,
+        clock=lambda: at,
+    )
+    first = runtime.collect(symbol="SPY", category="US_ETF", as_of=at)
+
+    restarted_factory = sessionmaker(
+        bind=migrated_postgres_engine,
+        expire_on_commit=False,
+    )
+    with restarted_factory() as session:
+        row = session.get(
+            MarketDataRecord,
+            (
+                market_event.source,
+                market_event.symbol,
+                market_event.stream,
+                market_event.event_time,
+                market_event.revision,
+            ),
+        )
+        assert row is not None
+        restored = MarketDataStore._decode(row)
+
+    assert isinstance(restored, Observation)
+    assert restored == first
+    assert restored.event.event_time == market_event.event_time
+    assert restored.event.available_at == market_event.available_at
+    assert restored.ingested_at == at
