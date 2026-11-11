@@ -39,9 +39,9 @@ class FakeCollector:
                 revision=1,
                 payload=Bar(
                     interval="1m",
-                    open=Decimal("100"),
-                    high=Decimal("101"),
-                    low=Decimal("99"),
+                    open=Decimal(100),
+                    high=Decimal(101),
+                    low=Decimal(99),
                     close=Decimal("100.5"),
                     volume=1000,
                 ),
