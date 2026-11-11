@@ -71,7 +71,7 @@ def test_probe_fetches_snapshot_and_completed_rth_bar():
             "symbol": "SPY",
             "category": "US_ETF",
             "timespan": "M1",
-            "count": "1",
+            "count": "2",
             "real_time_required": True,
             "trading_sessions": "RTH",
         },
@@ -256,3 +256,22 @@ def test_persistence_clock_and_replay_visibility_are_independent(sqlite_session)
     assert store.replay(as_of=persisted_at, requirements=requirements).observations == (
         observation,
     )
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_latest_completed_bar_is_selected_with_open_minute_present(reverse):
+    gateway = Gateway()
+    completed = gateway.bars[0]
+    gateway.bars = [
+        dict(completed, time=(AT - timedelta(minutes=1)).isoformat()),
+        dict(completed, time=AT.isoformat(), close="688.00"),
+    ]
+    if reverse:
+        gateway.bars.reverse()
+
+    event = WebullMarketDataAdapter(gateway, clock=lambda: AT).fetch_completed_1m_bar(
+        "SPY", category="US_ETF"
+    )
+
+    assert event.event_time == AT - timedelta(minutes=1)
+    assert event.payload.close == Decimal("688.12")

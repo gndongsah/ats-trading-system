@@ -204,11 +204,15 @@ def _bar_rows(body: object, symbol: str) -> list[dict[str, Any]]:
             "bar response must contain exactly one requested symbol"
         )
     bars = matches[0].get("result")
-    if not isinstance(bars, list) or len(bars) != 1 or not isinstance(bars[0], dict):
+    if (
+        not isinstance(bars, list)
+        or not 1 <= len(bars) <= 2
+        or not all(isinstance(row, dict) for row in bars)
+    ):
         raise MalformedResponse(
-            "instrument result must contain exactly one requested bar"
+            "instrument result must contain one or two requested bars"
         )
-    if bars[0].get("trading_session") != "RTH":
+    if any(row.get("trading_session") != "RTH" for row in bars):
         raise MalformedResponse("bar trading_session must be RTH")
     return bars
 
@@ -264,7 +268,7 @@ class WebullMarketDataAdapter:
                 symbol=symbol,
                 category=category,
                 timespan="M1",
-                count="1",
+                count="2",
                 real_time_required=True,
                 trading_sessions="RTH",
             )
@@ -275,15 +279,22 @@ class WebullMarketDataAdapter:
 
         bars = _bar_rows(_response_json(response, "stock completed 1m bar"), symbol)
         observed_at = self._observation_time()
-        row = bars[0]
-        provider_time = _timestamp(row.get("time"), "bar.time")
         available_at = observed_at.astimezone(UTC)
-        if provider_time > available_at:
+        timed_bars = [(_timestamp(row.get("time"), "bar.time"), row) for row in bars]
+        if any(at > available_at for at, _ in timed_bars):
             raise MalformedResponse("bar timestamp cannot be in the collector future")
-        # Preserve provider time; conservatively allow the entire minute to
-        # elapse even if the provider labels bars by their start time.
-        if provider_time + timedelta(minutes=1) > available_at:
+        if len({at for at, _ in timed_bars}) != len(timed_bars):
+            raise MalformedResponse("bar timestamps must be distinct")
+        # The latest row may describe the still-open minute. Keep the provider
+        # timestamp and require the full interval to have elapsed.
+        completed = [
+            (at, row)
+            for at, row in timed_bars
+            if at + timedelta(minutes=1) <= available_at
+        ]
+        if not completed:
             raise MalformedResponse("bar interval may still be incomplete")
+        provider_time, row = max(completed, key=lambda pair: pair[0])
         return MarketEvent(
             source=self._source,
             symbol=symbol,
