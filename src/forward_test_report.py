@@ -227,7 +227,13 @@ def _validate_and_select(
 
     selected_journals = []
     seen_results: set[UUID] = set()
+    linked_journal_ids = {
+        evidence.journal_id for evidence in selected_runs if evidence.journal_id is not None
+    }
+    enforce_campaign_journal_links = bool(linked_journal_ids)
     for entry in journals:
+        if enforce_campaign_journal_links and entry.id not in linked_journal_ids:
+            continue
         if entry.result is None:
             continue
         if entry.result.run_type is not RunType.PAPER:
