@@ -83,9 +83,7 @@ class CampaignScheduler:
         current = session_open + timedelta(
             minutes=self._policy.first_window_after_open_minutes
         )
-        last = session_close - timedelta(
-            minutes=self._policy.stop_before_close_minutes
-        )
+        last = session_close - timedelta(minutes=self._policy.stop_before_close_minutes)
         interval = timedelta(minutes=self._policy.execution_interval_minutes)
         while current <= last:
             if campaign.start_at <= current <= campaign.end_at:
