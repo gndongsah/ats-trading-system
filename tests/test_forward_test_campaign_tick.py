@@ -195,3 +195,19 @@ def test_restart_reuses_activation_and_persists_daily_scorecard(environment):
     )
     assert scorecard is not None
     assert scorecard.campaign_id == campaign.campaign_id
+
+
+def test_unactivated_campaign_cannot_shift_to_later_trading_day(environment):
+    campaign, _, artifacts, service = environment
+    later = datetime(2026, 11, 13, 14, 45, tzinfo=UTC)
+    result = CampaignTickRunner(
+        service=service,
+        artifacts=artifacts,
+        scheduler=CampaignScheduler(),
+        market_collector=FakeCollector(later),
+        clock=lambda: later,
+    ).tick(campaign_id=campaign.campaign_id)
+
+    assert result.disposition is CampaignTickDisposition.HOLD
+    assert result.activated is False
+    assert result.reason == "DAY1_NOT_ACTIVATED"
