@@ -304,9 +304,7 @@ class CampaignOperationsService:
                 raise LookupError(f"campaign {campaign_id} does not exist")
             runs = ForwardTestRunRepository(session).list_by_campaign(campaign_id)
             journal_repository = JournalRepository(session)
-            linked_ids = {
-                run.journal_id for run in runs if run.journal_id is not None
-            }
+            linked_ids = {run.journal_id for run in runs if run.journal_id is not None}
             journals = tuple(
                 entry
                 for journal_id in sorted(linked_ids, key=str)
@@ -327,7 +325,9 @@ class CampaignOperationsService:
         for artifact in artifacts:
             if artifact.campaign_digest != expected_digest:
                 raise PersistenceConflict("scorecard campaign digest mismatch")
-            scorecards.append(ForwardTestDailyScorecard.model_validate(artifact.payload))
+            scorecards.append(
+                ForwardTestDailyScorecard.model_validate(artifact.payload)
+            )
         return tuple(sorted(scorecards, key=lambda item: item.trading_day))
 
     @staticmethod
