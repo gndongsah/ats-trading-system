@@ -143,7 +143,9 @@ class CampaignTickRunner:
             campaign=campaign,
             trading_day=now.date(),
         )
-        market_jobs = tuple(job for job in jobs if job.kind is CampaignJobKind.MARKET_WINDOW)
+        market_jobs = tuple(
+            job for job in jobs if job.kind is CampaignJobKind.MARKET_WINDOW
+        )
         if not market_jobs:
             return self._result(
                 campaign_id=campaign_id,
@@ -171,11 +173,14 @@ class CampaignTickRunner:
                 if now > job.scheduled_at + MARKET_WINDOW_GRACE:
                     continue
                 key = self._job_key(job)
-                if self._artifacts.load(
-                    campaign_id=campaign_id,
-                    kind=CampaignArtifactKind.MARKET_WINDOW,
-                    key=key,
-                ) is not None:
+                if (
+                    self._artifacts.load(
+                        campaign_id=campaign_id,
+                        kind=CampaignArtifactKind.MARKET_WINDOW,
+                        key=key,
+                    )
+                    is not None
+                ):
                     continue
                 observation = self._market_collector.collect(
                     symbol=symbol,
@@ -225,11 +230,14 @@ class CampaignTickRunner:
 
             if job.kind is CampaignJobKind.DAILY_SCORECARD:
                 key = job.trading_day.isoformat()
-                if self._artifacts.load(
-                    campaign_id=campaign_id,
-                    kind=CampaignArtifactKind.DAILY_SCORECARD,
-                    key=key,
-                ) is None:
+                if (
+                    self._artifacts.load(
+                        campaign_id=campaign_id,
+                        kind=CampaignArtifactKind.DAILY_SCORECARD,
+                        key=key,
+                    )
+                    is None
+                ):
                     self._service.persist_daily_scorecard(
                         campaign_id=campaign_id,
                         trading_day=job.trading_day,
@@ -241,11 +249,14 @@ class CampaignTickRunner:
             if job.kind is CampaignJobKind.WEEKLY_REPORT:
                 week_start = job.trading_day - timedelta(days=job.trading_day.weekday())
                 key = week_start.isoformat()
-                if self._artifacts.load(
-                    campaign_id=campaign_id,
-                    kind=CampaignArtifactKind.WEEKLY_REPORT,
-                    key=key,
-                ) is None:
+                if (
+                    self._artifacts.load(
+                        campaign_id=campaign_id,
+                        kind=CampaignArtifactKind.WEEKLY_REPORT,
+                        key=key,
+                    )
+                    is None
+                ):
                     self._service.persist_weekly_report(
                         campaign_id=campaign_id,
                         week_start=week_start,
@@ -256,11 +267,14 @@ class CampaignTickRunner:
 
             assert job.kind is CampaignJobKind.READINESS
             key = job.trading_day.isoformat()
-            if self._artifacts.load(
-                campaign_id=campaign_id,
-                kind=CampaignArtifactKind.READINESS,
-                key=key,
-            ) is None:
+            if (
+                self._artifacts.load(
+                    campaign_id=campaign_id,
+                    kind=CampaignArtifactKind.READINESS,
+                    key=key,
+                )
+                is None
+            ):
                 self._service.persist_readiness(
                     campaign_id=campaign_id,
                     evaluated_at=now,
@@ -340,7 +354,9 @@ def build_owner_machine_runner(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="ATS-036D PAPER campaign scheduler tick")
+    parser = argparse.ArgumentParser(
+        description="ATS-036D PAPER campaign scheduler tick"
+    )
     parser.add_argument(
         "--campaign-id",
         type=UUID,
@@ -353,9 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--artifact-dir",
         type=Path,
-        default=Path(
-            os.getenv("ATS_CAMPAIGN_ARTIFACT_DIR", "artifacts/forward-test")
-        ),
+        default=Path(os.getenv("ATS_CAMPAIGN_ARTIFACT_DIR", "artifacts/forward-test")),
     )
     parser.add_argument("--symbol", default=DEFAULT_SYMBOL)
     parser.add_argument("--category", default=DEFAULT_CATEGORY)
