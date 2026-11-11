@@ -47,11 +47,19 @@ try {
     }
 
     $ContainerExists = (& docker ps -a --filter "name=^/$PostgresContainer$" --format "{{.Names}}" 2>$null | Out-String).Trim()
-    if ($ContainerExists -eq $PostgresContainer) {
-        $Running = (& docker ps --filter "name=^/$PostgresContainer$" --format "{{.Names}}" 2>$null | Out-String).Trim()
-        if ($Running -ne $PostgresContainer) {
-            & docker start $PostgresContainer *> $null
-        }
+    if ($ContainerExists -ne $PostgresContainer) {
+        Write-SanitizedLog "HOLD postgres_container_missing"
+        exit 2
+    }
+    $DataMount = (& docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Type}}:{{.Name}}{{end}}{{end}}' $PostgresContainer 2>$null | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($DataMount)) {
+        Write-SanitizedLog "HOLD postgres_data_volume_missing"
+        exit 2
+    }
+    & docker update --restart unless-stopped $PostgresContainer *> $null
+    $Running = (& docker ps --filter "name=^/$PostgresContainer$" --format "{{.Names}}" 2>$null | Out-String).Trim()
+    if ($Running -ne $PostgresContainer) {
+        & docker start $PostgresContainer *> $null
     }
 } catch {
     Write-SanitizedLog ("HOLD docker_runtime_error type={0}" -f $_.Exception.GetType().Name)
