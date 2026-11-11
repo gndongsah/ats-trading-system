@@ -98,11 +98,14 @@ def test_artifact_store_is_append_only_and_campaign_bound(factory, tmp_path):
     )
 
     assert replay == first
-    assert artifacts.load(
-        campaign_id=campaign.campaign_id,
-        kind=CampaignArtifactKind.DAILY_SCORECARD,
-        key="2026-11-12",
-    ) == first
+    assert (
+        artifacts.load(
+            campaign_id=campaign.campaign_id,
+            kind=CampaignArtifactKind.DAILY_SCORECARD,
+            key="2026-11-12",
+        )
+        == first
+    )
 
     with pytest.raises(PersistenceConflict, match="already exists"):
         artifacts.save(
@@ -120,9 +123,7 @@ def test_scheduler_uses_first_valid_xnys_window_and_daily_close_job(factory, tmp
         artifacts=CampaignArtifactRepository(tmp_path / "artifacts"),
     )
     scheduler = CampaignScheduler()
-    start = scheduler.next_start_at(
-        datetime(2026, 11, 11, 22, 0, tzinfo=UTC)
-    )
+    start = scheduler.next_start_at(datetime(2026, 11, 11, 22, 0, tzinfo=UTC))
     campaign = service.initialize_campaign(
         start_at=start,
         operational_policy_version="ops-v1",
@@ -137,7 +138,9 @@ def test_scheduler_uses_first_valid_xnys_window_and_daily_close_job(factory, tmp
     assert all(campaign.start_at <= job.scheduled_at <= campaign.end_at for job in jobs)
 
 
-def test_scheduler_adds_weekly_report_but_not_readiness_before_week_8(factory, tmp_path):
+def test_scheduler_adds_weekly_report_but_not_readiness_before_week_8(
+    factory, tmp_path
+):
     service = CampaignOperationsService(
         session_factory=factory,
         artifacts=CampaignArtifactRepository(tmp_path / "artifacts"),
