@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import date, datetime
 from pathlib import Path
 from uuid import UUID
@@ -42,7 +43,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="ATS-036C immutable PAPER campaign operations"
     )
-    parser.add_argument("--database-url", required=True)
+    parser.add_argument(
+        "--database-url",
+        default=os.getenv("ATS_DATABASE_URL") or os.getenv("DATABASE_URL"),
+        help="Prefer ATS_DATABASE_URL/DATABASE_URL so credentials are not exposed in argv.",
+    )
     parser.add_argument(
         "--artifact-dir",
         type=Path,
@@ -82,7 +87,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     scheduler = CampaignScheduler()
 
     if args.command == "next-start":
@@ -97,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    if not args.database_url:
+        parser.error("database URL required via --database-url or ATS_DATABASE_URL")
     service = _service(args)
     if args.command == "init":
         result = service.initialize_campaign(
