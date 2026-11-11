@@ -156,3 +156,39 @@ def test_scheduler_adds_weekly_report_but_not_readiness_before_week_8(factory, t
     kinds = {job.kind for job in jobs}
     assert CampaignJobKind.WEEKLY_REPORT in kinds
     assert CampaignJobKind.READINESS not in kinds
+
+
+def test_artifact_store_rejects_payload_tampering(factory, tmp_path):
+    service = CampaignOperationsService(
+        session_factory=factory,
+        artifacts=CampaignArtifactRepository(tmp_path / "artifacts"),
+    )
+    campaign = service.initialize_campaign(
+        start_at=datetime(2026, 11, 12, 14, 45, tzinfo=UTC),
+        operational_policy_version="ops-v1",
+        created_at=AT,
+    )
+    artifacts = CampaignArtifactRepository(tmp_path / "artifacts")
+    artifacts.save(
+        kind=CampaignArtifactKind.DAILY_SCORECARD,
+        campaign=campaign,
+        key="2026-11-12",
+        generated_at=AT,
+        payload={"proposals": 0, "fills": 0},
+    )
+    path = (
+        tmp_path
+        / "artifacts"
+        / str(campaign.campaign_id)
+        / CampaignArtifactKind.DAILY_SCORECARD.value
+        / "2026-11-12.json"
+    )
+    raw = path.read_text()
+    path.write_text(raw.replace('"proposals": 0', '"proposals": 9'))
+
+    with pytest.raises(PersistenceConflict, match="payload digest mismatch"):
+        artifacts.load(
+            campaign_id=campaign.campaign_id,
+            kind=CampaignArtifactKind.DAILY_SCORECARD,
+            key="2026-11-12",
+        )
