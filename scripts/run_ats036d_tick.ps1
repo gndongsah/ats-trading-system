@@ -1,6 +1,6 @@
 param(
     [string]$CampaignId = "e00289e2-4e14-4819-a493-de93263c79ad",
-    [string]$PostgresContainer = "ats036b-postgres"
+    [string]$PostgresContainer = $(if ($env:ATS_POSTGRES_CONTAINER) { $env:ATS_POSTGRES_CONTAINER } else { "ats036d-postgres" })
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,9 +51,22 @@ try {
         Write-SanitizedLog "HOLD postgres_container_missing"
         exit 2
     }
-    $DataMount = (& docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Type}}:{{.Name}}{{end}}{{end}}' $PostgresContainer 2>$null | Out-String).Trim()
-    if ([string]::IsNullOrWhiteSpace($DataMount)) {
+    $InspectJson = (& docker inspect $PostgresContainer 2>$null | Out-String)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($InspectJson)) {
+        Write-SanitizedLog "HOLD postgres_inspect_failed"
+        exit 2
+    }
+    $Inspect = $InspectJson | ConvertFrom-Json
+    $DataMount = @(
+        $Inspect[0].Mounts |
+            Where-Object { $_.Destination -eq "/var/lib/postgresql/data" }
+    )
+    if ($DataMount.Count -ne 1) {
         Write-SanitizedLog "HOLD postgres_data_volume_missing"
+        exit 2
+    }
+    if ($DataMount[0].Type -notin @("volume", "bind")) {
+        Write-SanitizedLog "HOLD postgres_data_mount_not_durable"
         exit 2
     }
     & docker update --restart unless-stopped $PostgresContainer *> $null
