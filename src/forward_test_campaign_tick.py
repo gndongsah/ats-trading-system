@@ -296,10 +296,30 @@ class CampaignTickRunner:
                     )
                     is None
                 ):
+                    latest = self._latest_activity(campaign_id, job)
+                    attempt = 1 if latest is None else max(1, latest.attempt + 1)
+                    self._append_activity(
+                        campaign=campaign,
+                        job=job,
+                        status=CampaignActivityStatus.RUNNING,
+                        occurred_at=now,
+                        attempt=attempt,
+                        reason_code=None,
+                        payload={"artifact_key": key},
+                    )
                     self._service.persist_daily_scorecard(
                         campaign_id=campaign_id,
                         trading_day=job.trading_day,
                         generated_at=now,
+                    )
+                    self._append_activity(
+                        campaign=campaign,
+                        job=job,
+                        status=CampaignActivityStatus.COMPLETED,
+                        occurred_at=self._utc(self._clock()),
+                        attempt=attempt,
+                        reason_code=None,
+                        payload={"artifact_key": key},
                     )
                     executed.append(f"DAILY_SCORECARD:{key}")
                 continue
@@ -315,10 +335,30 @@ class CampaignTickRunner:
                     )
                     is None
                 ):
+                    latest = self._latest_activity(campaign_id, job)
+                    attempt = 1 if latest is None else max(1, latest.attempt + 1)
+                    self._append_activity(
+                        campaign=campaign,
+                        job=job,
+                        status=CampaignActivityStatus.RUNNING,
+                        occurred_at=now,
+                        attempt=attempt,
+                        reason_code=None,
+                        payload={"artifact_key": key},
+                    )
                     self._service.persist_weekly_report(
                         campaign_id=campaign_id,
                         week_start=week_start,
                         generated_at=now,
+                    )
+                    self._append_activity(
+                        campaign=campaign,
+                        job=job,
+                        status=CampaignActivityStatus.COMPLETED,
+                        occurred_at=self._utc(self._clock()),
+                        attempt=attempt,
+                        reason_code=None,
+                        payload={"artifact_key": key},
                     )
                     executed.append(f"WEEKLY_REPORT:{key}")
                 continue
@@ -333,9 +373,29 @@ class CampaignTickRunner:
                 )
                 is None
             ):
+                latest = self._latest_activity(campaign_id, job)
+                attempt = 1 if latest is None else max(1, latest.attempt + 1)
+                self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.RUNNING,
+                    occurred_at=now,
+                    attempt=attempt,
+                    reason_code=None,
+                    payload={"artifact_key": key},
+                )
                 self._service.persist_readiness(
                     campaign_id=campaign_id,
                     evaluated_at=now,
+                )
+                self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.COMPLETED,
+                    occurred_at=self._utc(self._clock()),
+                    attempt=attempt,
+                    reason_code=None,
+                    payload={"artifact_key": key},
                 )
                 executed.append(f"READINESS:{key}")
 
