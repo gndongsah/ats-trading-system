@@ -520,11 +520,18 @@ def build_owner_machine_runner(
         adapter=build_keyring_sandbox_adapter(),
         session_factory=factory,
     )
+    notification_path = artifact_dir / "notifications" / "activity.jsonl"
+    notifiers: list[CampaignNotifier] = [JsonLineCampaignNotifier(notification_path)]
+    webhook_url = os.getenv("ATS_NOTIFICATION_WEBHOOK_URL")
+    if webhook_url:
+        notifiers.append(WebhookCampaignNotifier(webhook_url))
     return CampaignTickRunner(
         service=service,
         artifacts=artifacts,
         scheduler=CampaignScheduler(),
         market_collector=market_runtime,
+        session_factory=factory,
+        notifier=NotificationFanout(*notifiers),
     )
 
 
