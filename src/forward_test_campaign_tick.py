@@ -447,7 +447,7 @@ class CampaignTickRunner:
             )
         try:
             self._notifier.notify(notification_from_event(event))
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             pass
         return event
 
