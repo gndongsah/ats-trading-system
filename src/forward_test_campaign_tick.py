@@ -103,7 +103,7 @@ class CampaignTickRunner:
         self._scheduler = scheduler
         self._market_collector = market_collector
         self._session_factory = session_factory
-        self._notifier = notifier or NullCampaignNotifier()
+        self._notifier = NotificationFanout(notifier or NullCampaignNotifier())
         self._clock = clock
 
     def tick(
@@ -445,10 +445,7 @@ class CampaignTickRunner:
                 reason_code=reason_code,
                 payload=payload,
             )
-        try:
-            self._notifier.notify(notification_from_event(event))
-        except (OSError, RuntimeError, ValueError):
-            pass
+        self._notifier.notify(notification_from_event(event))
         return event
 
     @staticmethod
