@@ -50,6 +50,8 @@ class CampaignArtifactKind(StrEnum):
     WEEKLY_REPORT = "weekly-report"
     CAMPAIGN_REPORT = "campaign-report"
     READINESS = "readiness"
+    MARKET_WINDOW = "market-window"
+    ACTIVATION = "activation"
 
 
 class CampaignArtifactEnvelope(BaseModel):
