@@ -4,8 +4,8 @@ Revision ID: 20261112_14
 Revises: 20261028_13
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "20261112_14"
