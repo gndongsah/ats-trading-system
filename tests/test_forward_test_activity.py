@@ -174,8 +174,7 @@ def test_overdue_missing_windows_are_reconciled_as_missed(environment):
     assert len(market_latest) == 25
     assert all(event.status is CampaignActivityStatus.MISSED for event in market_latest)
     assert all(
-        event.reason_code == "MARKET_WINDOW_GRACE_EXPIRED"
-        for event in market_latest
+        event.reason_code == "MARKET_WINDOW_GRACE_EXPIRED" for event in market_latest
     )
 
 
