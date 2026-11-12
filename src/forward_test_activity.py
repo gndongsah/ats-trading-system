@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-from urllib.request import Request, urlopen
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+from urllib.request import Request, urlopen
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
