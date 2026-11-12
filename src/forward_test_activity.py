@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import json
 from urllib.request import Request, urlopen
-from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -224,7 +223,7 @@ class WebhookCampaignNotifier(CampaignNotifier):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urlopen(request, timeout=self._timeout_seconds) as response:  # noqa: S310
+        with urlopen(request, timeout=self._timeout_seconds) as response:
             if not 200 <= response.status < 300:
                 raise RuntimeError("notification webhook returned non-success status")
 
@@ -237,7 +236,7 @@ class NotificationFanout(CampaignNotifier):
         for notifier in self._notifiers:
             try:
                 notifier.notify(notification)
-            except Exception:
+            except (OSError, RuntimeError, ValueError):
                 # Notification transport must never alter campaign execution state.
                 continue
 
