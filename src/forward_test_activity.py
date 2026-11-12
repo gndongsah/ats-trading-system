@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from urllib.request import Request, urlopen
 from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -204,6 +205,28 @@ class JsonLineCampaignNotifier(CampaignNotifier):
         line = json.dumps(notification.model_dump(mode="json"), sort_keys=True)
         with self._path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
+
+
+class WebhookCampaignNotifier(CampaignNotifier):
+    """Optional generic JSON webhook transport."""
+
+    def __init__(self, url: str, *, timeout_seconds: float = 5.0) -> None:
+        if not url.startswith(("https://", "http://")):
+            raise ValueError("notification webhook must be http(s)")
+        self._url = url
+        self._timeout_seconds = timeout_seconds
+
+    def notify(self, notification: CampaignNotification) -> None:
+        body = json.dumps(notification.model_dump(mode="json")).encode("utf-8")
+        request = Request(
+            self._url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(request, timeout=self._timeout_seconds) as response:  # noqa: S310
+            if not 200 <= response.status < 300:
+                raise RuntimeError("notification webhook returned non-success status")
 
 
 class NotificationFanout(CampaignNotifier):
