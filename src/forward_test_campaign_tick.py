@@ -51,6 +51,7 @@ DEFAULT_SYMBOL = "SPY"
 DEFAULT_CATEGORY = "US_ETF"
 DAY1_ACTIVATION_KEY = "day1"
 MARKET_WINDOW_GRACE = timedelta(minutes=5)
+MAX_MARKET_WINDOW_ATTEMPTS = 2
 
 
 class MarketCollector(Protocol):
@@ -202,10 +203,38 @@ class CampaignTickRunner:
                     is not None
                 ):
                     continue
-                observation = self._market_collector.collect(
-                    symbol=symbol,
-                    category=category,
+                latest = self._latest_activity(campaign_id, job)
+                attempt = 1 if latest is None else max(1, latest.attempt + 1)
+                self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.RUNNING,
+                    occurred_at=now,
+                    attempt=attempt,
+                    reason_code=None,
+                    payload={"artifact_key": key},
                 )
+                try:
+                    observation = self._market_collector.collect(
+                        symbol=symbol,
+                        category=category,
+                    )
+                except Exception as error:  # noqa: BLE001 - sanitize provider failure.
+                    terminal = attempt >= MAX_MARKET_WINDOW_ATTEMPTS
+                    self._append_activity(
+                        campaign=campaign,
+                        job=job,
+                        status=(
+                            CampaignActivityStatus.RETRY_EXHAUSTED
+                            if terminal
+                            else CampaignActivityStatus.FAILED
+                        ),
+                        occurred_at=self._utc(self._clock()),
+                        attempt=attempt,
+                        reason_code=type(error).__name__,
+                        payload={"artifact_key": key},
+                    )
+                    continue
                 payload = {
                     "scheduled_at": job.scheduled_at.isoformat(),
                     "trading_day": job.trading_day.isoformat(),
@@ -226,6 +255,15 @@ class CampaignTickRunner:
                     key=key,
                     generated_at=completed_at,
                     payload=payload,
+                )
+                self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.COMPLETED,
+                    occurred_at=completed_at,
+                    attempt=attempt,
+                    reason_code=None,
+                    payload={"artifact_key": key},
                 )
                 executed.append(f"MARKET_WINDOW:{key}")
                 if activation is None and job.scheduled_at == first_window.scheduled_at:
