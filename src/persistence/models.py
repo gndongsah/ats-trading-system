@@ -619,6 +619,51 @@ class ForwardTestCampaignRecord(Base):
     manifest_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
 
 
+class CampaignActivityEventRecord(Base):
+    __tablename__ = "ats_campaign_activity_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "campaign_id",
+            "job_id",
+            "sequence",
+            name="uq_ats_campaign_activity_job_sequence",
+        ),
+        CheckConstraint("sequence >= 1", name="ck_ats_campaign_activity_sequence"),
+        CheckConstraint("attempt >= 0", name="ck_ats_campaign_activity_attempt"),
+        CheckConstraint(
+            "status IN ('SCHEDULED','RUNNING','COMPLETED','HOLD','FAILED','MISSED','RETRY_EXHAUSTED')",
+            name="ck_ats_campaign_activity_status",
+        ),
+        Index(
+            "ix_ats_campaign_activity_campaign_schedule",
+            "campaign_id",
+            "scheduled_at",
+            "job_type",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    campaign_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ats_forward_test_campaigns.id"),
+        nullable=False,
+    )
+    campaign_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    job_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    job_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    scheduled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    reason_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    event_data: Mapped[dict[str, Any]] = mapped_column(JSON_DOCUMENT, nullable=False)
+
+
 class ForwardTestRunRecord(Base):
     __tablename__ = "ats_forward_test_runs"
     __table_args__ = (
