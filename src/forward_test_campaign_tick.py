@@ -22,6 +22,16 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.database import create_database_engine
+from src.forward_test_activity import (
+    CampaignActivityRepository,
+    CampaignActivityStatus,
+    CampaignNotifier,
+    JsonLineCampaignNotifier,
+    NotificationFanout,
+    NullCampaignNotifier,
+    WebhookCampaignNotifier,
+    notification_from_event,
+)
 from src.forward_test_campaign_ops import (
     CampaignArtifactKind,
     CampaignArtifactRepository,
@@ -41,6 +51,7 @@ DEFAULT_SYMBOL = "SPY"
 DEFAULT_CATEGORY = "US_ETF"
 DAY1_ACTIVATION_KEY = "day1"
 MARKET_WINDOW_GRACE = timedelta(minutes=5)
+MAX_MARKET_WINDOW_ATTEMPTS = 2
 
 
 class MarketCollector(Protocol):
@@ -83,12 +94,16 @@ class CampaignTickRunner:
         artifacts: CampaignArtifactRepository,
         scheduler: CampaignScheduler,
         market_collector: MarketCollector,
+        session_factory: sessionmaker[Session] | None = None,
+        notifier: CampaignNotifier | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._service = service
         self._artifacts = artifacts
         self._scheduler = scheduler
         self._market_collector = market_collector
+        self._session_factory = session_factory
+        self._notifier = NotificationFanout(notifier or NullCampaignNotifier())
         self._clock = clock
 
     def tick(
@@ -155,6 +170,12 @@ class CampaignTickRunner:
                 reason="NO_CAMPAIGN_JOBS_TODAY",
             )
 
+        self._seed_and_reconcile_activity(
+            campaign=campaign,
+            jobs=jobs,
+            now=now,
+        )
+
         first_window = market_jobs[0]
         if activation is None and now > first_window.scheduled_at + MARKET_WINDOW_GRACE:
             return self._result(
@@ -182,10 +203,38 @@ class CampaignTickRunner:
                     is not None
                 ):
                     continue
-                observation = self._market_collector.collect(
-                    symbol=symbol,
-                    category=category,
+                latest = self._latest_activity(campaign_id, job)
+                attempt = 1 if latest is None else max(1, latest.attempt + 1)
+                self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.RUNNING,
+                    occurred_at=now,
+                    attempt=attempt,
+                    reason_code=None,
+                    payload={"artifact_key": key},
                 )
+                try:
+                    observation = self._market_collector.collect(
+                        symbol=symbol,
+                        category=category,
+                    )
+                except Exception as error:  # noqa: BLE001 - sanitize provider failure.
+                    terminal = attempt >= MAX_MARKET_WINDOW_ATTEMPTS
+                    self._append_activity(
+                        campaign=campaign,
+                        job=job,
+                        status=(
+                            CampaignActivityStatus.RETRY_EXHAUSTED
+                            if terminal
+                            else CampaignActivityStatus.FAILED
+                        ),
+                        occurred_at=self._utc(self._clock()),
+                        attempt=attempt,
+                        reason_code=type(error).__name__,
+                        payload={"artifact_key": key},
+                    )
+                    continue
                 payload = {
                     "scheduled_at": job.scheduled_at.isoformat(),
                     "trading_day": job.trading_day.isoformat(),
@@ -206,6 +255,15 @@ class CampaignTickRunner:
                     key=key,
                     generated_at=completed_at,
                     payload=payload,
+                )
+                self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.COMPLETED,
+                    occurred_at=completed_at,
+                    attempt=attempt,
+                    reason_code=None,
+                    payload={"artifact_key": key},
                 )
                 executed.append(f"MARKET_WINDOW:{key}")
                 if activation is None and job.scheduled_at == first_window.scheduled_at:
@@ -238,10 +296,30 @@ class CampaignTickRunner:
                     )
                     is None
                 ):
+                    latest = self._latest_activity(campaign_id, job)
+                    attempt = 1 if latest is None else max(1, latest.attempt + 1)
+                    self._append_activity(
+                        campaign=campaign,
+                        job=job,
+                        status=CampaignActivityStatus.RUNNING,
+                        occurred_at=now,
+                        attempt=attempt,
+                        reason_code=None,
+                        payload={"artifact_key": key},
+                    )
                     self._service.persist_daily_scorecard(
                         campaign_id=campaign_id,
                         trading_day=job.trading_day,
                         generated_at=now,
+                    )
+                    self._append_activity(
+                        campaign=campaign,
+                        job=job,
+                        status=CampaignActivityStatus.COMPLETED,
+                        occurred_at=self._utc(self._clock()),
+                        attempt=attempt,
+                        reason_code=None,
+                        payload={"artifact_key": key},
                     )
                     executed.append(f"DAILY_SCORECARD:{key}")
                 continue
@@ -257,10 +335,30 @@ class CampaignTickRunner:
                     )
                     is None
                 ):
+                    latest = self._latest_activity(campaign_id, job)
+                    attempt = 1 if latest is None else max(1, latest.attempt + 1)
+                    self._append_activity(
+                        campaign=campaign,
+                        job=job,
+                        status=CampaignActivityStatus.RUNNING,
+                        occurred_at=now,
+                        attempt=attempt,
+                        reason_code=None,
+                        payload={"artifact_key": key},
+                    )
                     self._service.persist_weekly_report(
                         campaign_id=campaign_id,
                         week_start=week_start,
                         generated_at=now,
+                    )
+                    self._append_activity(
+                        campaign=campaign,
+                        job=job,
+                        status=CampaignActivityStatus.COMPLETED,
+                        occurred_at=self._utc(self._clock()),
+                        attempt=attempt,
+                        reason_code=None,
+                        payload={"artifact_key": key},
                     )
                     executed.append(f"WEEKLY_REPORT:{key}")
                 continue
@@ -275,9 +373,29 @@ class CampaignTickRunner:
                 )
                 is None
             ):
+                latest = self._latest_activity(campaign_id, job)
+                attempt = 1 if latest is None else max(1, latest.attempt + 1)
+                self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.RUNNING,
+                    occurred_at=now,
+                    attempt=attempt,
+                    reason_code=None,
+                    payload={"artifact_key": key},
+                )
                 self._service.persist_readiness(
                     campaign_id=campaign_id,
                     evaluated_at=now,
+                )
+                self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.COMPLETED,
+                    occurred_at=self._utc(self._clock()),
+                    attempt=attempt,
+                    reason_code=None,
+                    payload={"artifact_key": key},
                 )
                 executed.append(f"READINESS:{key}")
 
@@ -293,6 +411,120 @@ class CampaignTickRunner:
             executed_jobs=tuple(executed),
             reason=None if executed else "NO_DUE_UNEXECUTED_JOBS",
         )
+
+    def _seed_and_reconcile_activity(
+        self,
+        *,
+        campaign,
+        jobs: tuple[CampaignScheduledJob, ...],
+        now: datetime,
+    ) -> None:
+        if self._session_factory is None:
+            return
+        for job in jobs:
+            latest = self._latest_activity(campaign.campaign_id, job)
+            if latest is None:
+                latest = self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.SCHEDULED,
+                    occurred_at=now,
+                    attempt=0,
+                    reason_code=None,
+                    payload={"scheduled_at": job.scheduled_at.isoformat()},
+                )
+            if latest.status.terminal:
+                continue
+
+            artifact_kind = self._artifact_kind(job.kind)
+            artifact_key = self._artifact_key(job)
+            artifact = (
+                self._artifacts.load(
+                    campaign_id=campaign.campaign_id,
+                    kind=artifact_kind,
+                    key=artifact_key,
+                )
+                if artifact_kind is not None
+                else None
+            )
+            if artifact is not None:
+                self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.COMPLETED,
+                    occurred_at=max(now, artifact.generated_at),
+                    attempt=max(latest.attempt, 1),
+                    reason_code="RECONCILED_EXISTING_ARTIFACT",
+                    payload={"artifact_key": artifact_key},
+                )
+                continue
+
+            if (
+                job.kind is CampaignJobKind.MARKET_WINDOW
+                and now > job.scheduled_at + MARKET_WINDOW_GRACE
+            ):
+                self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.MISSED,
+                    occurred_at=now,
+                    attempt=latest.attempt,
+                    reason_code="MARKET_WINDOW_GRACE_EXPIRED",
+                    payload={"artifact_key": artifact_key},
+                )
+
+    def _latest_activity(self, campaign_id: UUID, job: CampaignScheduledJob):
+        if self._session_factory is None:
+            return None
+        with self._session_factory() as session:
+            return CampaignActivityRepository(session).latest_for_job(
+                campaign_id=campaign_id,
+                job_id=CampaignActivityRepository.job_id(campaign_id, job),
+            )
+
+    def _append_activity(
+        self,
+        *,
+        campaign,
+        job: CampaignScheduledJob,
+        status: CampaignActivityStatus,
+        occurred_at: datetime,
+        attempt: int,
+        reason_code: str | None,
+        payload: dict[str, object],
+    ):
+        if self._session_factory is None:
+            return None
+        with self._session_factory.begin() as session:
+            event = CampaignActivityRepository(session).append(
+                campaign=campaign,
+                job=job,
+                status=status,
+                occurred_at=occurred_at,
+                attempt=attempt,
+                reason_code=reason_code,
+                payload=payload,
+            )
+        self._notifier.notify(notification_from_event(event))
+        return event
+
+    @staticmethod
+    def _artifact_kind(kind: CampaignJobKind):
+        return {
+            CampaignJobKind.MARKET_WINDOW: CampaignArtifactKind.MARKET_WINDOW,
+            CampaignJobKind.DAILY_SCORECARD: CampaignArtifactKind.DAILY_SCORECARD,
+            CampaignJobKind.WEEKLY_REPORT: CampaignArtifactKind.WEEKLY_REPORT,
+            CampaignJobKind.READINESS: CampaignArtifactKind.READINESS,
+        }.get(kind)
+
+    @classmethod
+    def _artifact_key(cls, job: CampaignScheduledJob) -> str:
+        if job.kind is CampaignJobKind.MARKET_WINDOW:
+            return cls._job_key(job)
+        if job.kind is CampaignJobKind.WEEKLY_REPORT:
+            week_start = job.trading_day - timedelta(days=job.trading_day.weekday())
+            return week_start.isoformat()
+        return job.trading_day.isoformat()
 
     @staticmethod
     def _job_key(job: CampaignScheduledJob) -> str:
@@ -345,11 +577,18 @@ def build_owner_machine_runner(
         adapter=build_keyring_sandbox_adapter(),
         session_factory=factory,
     )
+    notification_path = artifact_dir / "notifications" / "activity.jsonl"
+    notifiers: list[CampaignNotifier] = [JsonLineCampaignNotifier(notification_path)]
+    webhook_url = os.getenv("ATS_NOTIFICATION_WEBHOOK_URL")
+    if webhook_url:
+        notifiers.append(WebhookCampaignNotifier(webhook_url))
     return CampaignTickRunner(
         service=service,
         artifacts=artifacts,
         scheduler=CampaignScheduler(),
         market_collector=market_runtime,
+        session_factory=factory,
+        notifier=NotificationFanout(*notifiers),
     )
 
 
