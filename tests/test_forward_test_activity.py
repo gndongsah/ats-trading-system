@@ -225,3 +225,124 @@ def test_existing_market_artifact_reconciles_as_completed(environment):
     assert latest is not None
     assert latest.status is CampaignActivityStatus.COMPLETED
     assert latest.reason_code == "RECONCILED_EXISTING_ARTIFACT"
+
+
+def test_november_17_tick_reconciles_november_12_history(environment):
+    campaign, factory, artifacts, service, tmp_path = environment
+    scheduler = CampaignScheduler()
+    november_12_jobs = scheduler.jobs_for_day(
+        campaign=campaign,
+        trading_day=START.date(),
+    )
+    first_market = next(
+        job for job in november_12_jobs if job.kind.value == "MARKET_WINDOW"
+    )
+    first_key = first_market.scheduled_at.strftime("%Y%m%dT%H%M%SZ")
+    artifacts.save(
+        kind=CampaignArtifactKind.ACTIVATION,
+        campaign=campaign,
+        key="day1",
+        generated_at=START + timedelta(seconds=20),
+        payload={
+            "activated_at": (START + timedelta(seconds=20)).isoformat(),
+            "first_window_scheduled_at": START.isoformat(),
+            "broker_order_submission": "DISABLED",
+            "live_execution_used": False,
+        },
+    )
+    artifacts.save(
+        kind=CampaignArtifactKind.MARKET_WINDOW,
+        campaign=campaign,
+        key=first_key,
+        generated_at=START + timedelta(seconds=20),
+        payload={"scheduled_at": START.isoformat()},
+    )
+
+    november_17 = datetime(2026, 11, 17, 22, 30, tzinfo=UTC)
+    CampaignTickRunner(
+        service=service,
+        artifacts=artifacts,
+        scheduler=scheduler,
+        market_collector=NeverCollector(),
+        session_factory=factory,
+        notifier=JsonLineCampaignNotifier(tmp_path / "activity.jsonl"),
+        clock=lambda: november_17,
+    ).tick(campaign_id=campaign.campaign_id)
+
+    with factory() as session:
+        events = CampaignActivityRepository(session).list_for_campaign(
+            campaign.campaign_id
+        )
+
+    latest = {}
+    for event in events:
+        latest[event.job_id] = event
+    november_12_market = [
+        event
+        for event in latest.values()
+        if event.job_type == "MARKET_WINDOW"
+        and event.scheduled_at.date() == START.date()
+    ]
+
+    assert len(november_12_market) == 25
+    assert sum(
+        event.status is CampaignActivityStatus.COMPLETED
+        for event in november_12_market
+    ) == 1
+    assert sum(
+        event.status is CampaignActivityStatus.MISSED
+        for event in november_12_market
+    ) == 24
+
+
+def test_prior_weekly_report_is_recovered_after_restart(environment):
+    campaign, factory, artifacts, service, tmp_path = environment
+    scheduler = CampaignScheduler()
+    artifacts.save(
+        kind=CampaignArtifactKind.ACTIVATION,
+        campaign=campaign,
+        key="day1",
+        generated_at=START + timedelta(seconds=20),
+        payload={
+            "activated_at": (START + timedelta(seconds=20)).isoformat(),
+            "first_window_scheduled_at": START.isoformat(),
+            "broker_order_submission": "DISABLED",
+            "live_execution_used": False,
+        },
+    )
+    november_17 = datetime(2026, 11, 17, 22, 30, tzinfo=UTC)
+
+    CampaignTickRunner(
+        service=service,
+        artifacts=artifacts,
+        scheduler=scheduler,
+        market_collector=NeverCollector(),
+        session_factory=factory,
+        notifier=JsonLineCampaignNotifier(tmp_path / "activity.jsonl"),
+        clock=lambda: november_17,
+    ).tick(campaign_id=campaign.campaign_id)
+
+    weekly = artifacts.list_kind(
+        campaign_id=campaign.campaign_id,
+        kind=CampaignArtifactKind.WEEKLY_REPORT,
+    )
+    assert len(weekly) == 1
+    assert weekly[0].payload["period_start"] == campaign.start_at.date().isoformat()
+
+    friday = datetime(2026, 11, 13, 21, 30, tzinfo=UTC).date()
+    weekly_job = next(
+        job
+        for job in scheduler.jobs_for_day(campaign=campaign, trading_day=friday)
+        if job.kind.value == "WEEKLY_REPORT"
+    )
+    with factory() as session:
+        latest = CampaignActivityRepository(session).latest_for_job(
+            campaign_id=campaign.campaign_id,
+            job_id=CampaignActivityRepository.job_id(
+                campaign.campaign_id,
+                weekly_job,
+            ),
+        )
+    assert latest is not None
+    assert latest.status is CampaignActivityStatus.COMPLETED
+    assert latest.reason_code == "HISTORICAL_REPORT_RECOVERED"
