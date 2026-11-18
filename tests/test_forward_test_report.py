@@ -328,3 +328,26 @@ def test_normal_risk_denial_is_not_a_risk_gate_breach():
 
     assert result.risk_denials == 1
     assert result.risk_gate_breaches == 0
+
+
+def test_weekly_report_clamps_partial_first_week_to_campaign_start():
+    partial_start = datetime(2026, 11, 12, 14, 45, tzinfo=UTC)
+    campaign = build_forward_test_campaign(
+        created_at=partial_start - timedelta(minutes=5),
+        start_at=partial_start,
+        end_at=partial_start + timedelta(weeks=8),
+        setup_scope=("breakout", "pullback"),
+        operational_policy_version="ops-v1",
+    )
+
+    report = build_weekly_forward_test_report(
+        campaign=campaign,
+        week_start=date(2026, 11, 9),
+        as_of=datetime(2026, 11, 13, 22, 0, tzinfo=UTC),
+        scorecards=(),
+        run_evidence=(),
+        journals=(),
+    )
+
+    assert report.period_start == date(2026, 11, 12)
+    assert report.period_end == date(2026, 11, 15)
