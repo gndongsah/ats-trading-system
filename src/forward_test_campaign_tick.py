@@ -145,6 +145,12 @@ class CampaignTickRunner:
                 disposition=CampaignTickDisposition.HOLD,
                 reason="DAY1_NOT_ACTIVATED",
             )
+        self._reconcile_prior_trading_days(
+            campaign=campaign,
+            through_day=min(now.date() - timedelta(days=1), campaign.end_at.date()),
+            now=now,
+        )
+
         if not self._scheduler.is_trading_day(now.date()):
             return self._result(
                 campaign_id=campaign_id,
@@ -411,6 +417,110 @@ class CampaignTickRunner:
             executed_jobs=tuple(executed),
             reason=None if executed else "NO_DUE_UNEXECUTED_JOBS",
         )
+
+    def _reconcile_prior_trading_days(
+        self,
+        *,
+        campaign,
+        through_day,
+        now: datetime,
+    ) -> None:
+        if through_day < campaign.start_at.date():
+            return
+        day = campaign.start_at.date()
+        while day <= through_day:
+            if self._scheduler.is_trading_day(day):
+                jobs = self._scheduler.jobs_for_day(
+                    campaign=campaign,
+                    trading_day=day,
+                )
+                self._seed_and_reconcile_activity(
+                    campaign=campaign,
+                    jobs=jobs,
+                    now=now,
+                )
+                self._recover_due_report_jobs(
+                    campaign=campaign,
+                    jobs=jobs,
+                    now=now,
+                )
+            day += timedelta(days=1)
+
+    def _recover_due_report_jobs(
+        self,
+        *,
+        campaign,
+        jobs: tuple[CampaignScheduledJob, ...],
+        now: datetime,
+    ) -> None:
+        for job in jobs:
+            if job.kind is CampaignJobKind.MARKET_WINDOW or job.scheduled_at > now:
+                continue
+            latest = self._latest_activity(campaign.campaign_id, job)
+            if latest is not None and latest.status.terminal:
+                continue
+            artifact_kind = self._artifact_kind(job.kind)
+            artifact_key = self._artifact_key(job)
+            artifact = self._artifacts.load(
+                campaign_id=campaign.campaign_id,
+                kind=artifact_kind,
+                key=artifact_key,
+            )
+            if artifact is not None:
+                continue
+            attempt = 1 if latest is None else max(1, latest.attempt + 1)
+            if latest is None or latest.status is not CampaignActivityStatus.RUNNING:
+                self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.RUNNING,
+                    occurred_at=now,
+                    attempt=attempt,
+                    reason_code="HISTORICAL_REPORT_RECOVERY",
+                    payload={"artifact_key": artifact_key},
+                )
+            try:
+                if job.kind is CampaignJobKind.DAILY_SCORECARD:
+                    self._service.persist_daily_scorecard(
+                        campaign_id=campaign.campaign_id,
+                        trading_day=job.trading_day,
+                        generated_at=now,
+                    )
+                elif job.kind is CampaignJobKind.WEEKLY_REPORT:
+                    week_start = job.trading_day - timedelta(
+                        days=job.trading_day.weekday()
+                    )
+                    self._service.persist_weekly_report(
+                        campaign_id=campaign.campaign_id,
+                        week_start=week_start,
+                        generated_at=now,
+                    )
+                else:
+                    assert job.kind is CampaignJobKind.READINESS
+                    self._service.persist_readiness(
+                        campaign_id=campaign.campaign_id,
+                        evaluated_at=now,
+                    )
+            except Exception as error:  # noqa: BLE001 - persist sanitized failure.
+                self._append_activity(
+                    campaign=campaign,
+                    job=job,
+                    status=CampaignActivityStatus.HOLD,
+                    occurred_at=self._utc(self._clock()),
+                    attempt=attempt,
+                    reason_code=type(error).__name__,
+                    payload={"artifact_key": artifact_key},
+                )
+                continue
+            self._append_activity(
+                campaign=campaign,
+                job=job,
+                status=CampaignActivityStatus.COMPLETED,
+                occurred_at=self._utc(self._clock()),
+                attempt=attempt,
+                reason_code="HISTORICAL_REPORT_RECOVERED",
+                payload={"artifact_key": artifact_key},
+            )
 
     def _seed_and_reconcile_activity(
         self,
