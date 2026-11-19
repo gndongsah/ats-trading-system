@@ -285,14 +285,20 @@ def test_november_17_tick_reconciles_november_12_history(environment):
     ]
 
     assert len(november_12_market) == 25
-    assert sum(
-        event.status is CampaignActivityStatus.COMPLETED
-        for event in november_12_market
-    ) == 1
-    assert sum(
-        event.status is CampaignActivityStatus.MISSED
-        for event in november_12_market
-    ) == 24
+    assert (
+        sum(
+            event.status is CampaignActivityStatus.COMPLETED
+            for event in november_12_market
+        )
+        == 1
+    )
+    assert (
+        sum(
+            event.status is CampaignActivityStatus.MISSED
+            for event in november_12_market
+        )
+        == 24
+    )
 
 
 def test_prior_weekly_report_is_recovered_after_restart(environment):
