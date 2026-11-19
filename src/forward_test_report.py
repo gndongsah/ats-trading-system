@@ -350,11 +350,13 @@ def build_weekly_forward_test_report(
     run_evidence: tuple[ForwardTestRunEvidence, ...],
     journals: tuple[JournalEntry, ...],
 ) -> ForwardTestEvidenceReport:
+    period_start = max(week_start, campaign.start_at.date())
+    period_end = min(week_start + timedelta(days=6), campaign.end_at.date())
     return build_forward_test_evidence_report(
         kind=ForwardTestReportKind.WEEKLY,
         campaign=campaign,
-        period_start=week_start,
-        period_end=week_start + timedelta(days=6),
+        period_start=period_start,
+        period_end=period_end,
         as_of=as_of,
         scorecards=scorecards,
         run_evidence=run_evidence,
